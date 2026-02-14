@@ -1,0 +1,569 @@
+/* src/App.css */
+:root {
+  --text: #0f172a;
+  --muted: #475569;
+  --border: #e2e8f0;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* CENTER THE WHOLE APP */
+html,
+body,
+#root {
+  min-height: 100%;
+  width: 100%;
+}
+
+#root {
+  display: flex;
+  justify-content: center;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+
+  background:
+    radial-gradient(900px 500px at 20% 10%, rgba(37, 99, 235, 0.12), transparent),
+    radial-gradient(700px 450px at 85% 15%, rgba(34, 197, 94, 0.12), transparent),
+    linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
+
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+
+/* MAIN LAYOUT */
+.container {
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 64px 16px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 100vh;
+}
+
+/* WATERMARK LOGO */
+.bg-logo {
+  position: fixed;
+  inset: 0;
+  background-image: url("/logo.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 520px;
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container > :not(.bg-logo) {
+  position: relative;
+  z-index: 1;
+}
+
+/* HEADER */
+.header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+.brand p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ABOUT */
+.about {
+  width: 100%;
+  margin-top: 0;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.aboutTitle {
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.aboutText {
+  color: var(--text);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+/* CARD */
+.card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.10);
+  backdrop-filter: blur(10px);
+}
+
+/* FORM */
+.field {
+  margin-top: 16px;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+input:focus,
+select:focus {
+  border-color: rgba(37, 99, 235, 0.6);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  outline: none;
+}
+
+/* BUTTONS */
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+button.primary {
+  background: var(--primary);
+  color: white;
+}
+
+button.primary:hover {
+  background: var(--primary-hover);
+}
+
+button.secondary {
+  background: #eef2ff;
+  color: #1e3a8a;
+}
+
+button.secondary:hover {
+  background: #e0e7ff;
+}
+
+/* INFO + ERROR CARDS */
+.infoCard {
+  width: 100%;
+  margin-top: 14px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.infoTitle {
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.infoBody {
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.errorCard {
+  width: 100%;
+  margin-top: 14px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  background: rgba(254, 226, 226, 0.55);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.errorTitle {
+  font-weight: 900;
+  margin-bottom: 6px;
+  color: #991b1b;
+}
+
+.errorMessage {
+  color: #7f1d1d;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+/* HOW IT WORKS */
+.howItWorks {
+  width: 100%;
+  margin-top: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.howHeader {
+  margin-bottom: 14px;
+}
+
+.howTitle {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.howSubtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.howGrid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.howStep {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  padding: 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(248, 250, 252, 0.7);
+}
+
+.howNum {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #1e3a8a;
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.18);
+}
+
+.howStepTitle {
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.howStepText {
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 14px;
+}
+
+.howNote {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* SPOTLIGHT */
+.spotlight {
+  width: 100%;
+  margin-top: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  background: linear-gradient(
+    180deg,
+    rgba(34, 197, 94, 0.10),
+    rgba(255, 255, 255, 0.75)
+  );
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.spotlightTitle {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.spotlightMain {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.spotlightName {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.spotlightReason {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.kpis {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.kpi {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.75);
+  min-width: 140px;
+}
+
+.kpiLabel {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.kpiValue {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* SAVINGS VIZ */
+.savingsViz {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.barsRow {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.barItem {
+  display: grid;
+  grid-template-columns: 120px 1fr 110px;
+  gap: 12px;
+  align-items: center;
+}
+
+.barLabel {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.barTrack {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.9);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.barValue {
+  font-size: 13px;
+  color: var(--text);
+  text-align: right;
+  font-weight: 700;
+}
+
+.smallHint {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* FAQs */
+.faq {
+  width: 100%;
+  margin-top: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.faqHeader {
+  margin-bottom: 14px;
+}
+
+.faqTitle {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.faqSubtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.faqItem {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(248, 250, 252, 0.7);
+  border-radius: 16px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+
+.faqQ {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--text);
+  list-style: none;
+  outline: none;
+}
+
+.faqQ::-webkit-details-marker {
+  display: none;
+}
+
+.faqQ::after {
+  content: "+";
+  float: right;
+  color: rgba(71, 85, 105, 0.9);
+  font-weight: 900;
+}
+
+details[open] .faqQ::after {
+  content: "–";
+}
+
+.faqA {
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+/* FOOTER */
+.footer {
+  width: 100%;
+  margin-top: 22px;
+  padding: 14px 2px 28px;
+}
+
+.footerInner {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(10px);
+}
+
+.footerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.footerBrand {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.footerMeta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.footerLink {
+  font-size: 13px;
+  color: #1e3a8a;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+}
+
+.footerDot {
+  color: rgba(71, 85, 105, 0.6);
+}
