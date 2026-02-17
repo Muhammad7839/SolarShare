@@ -1,587 +1,1183 @@
 // src/App.jsx
 import { useMemo, useState } from "react";
+import {
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+import {
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  FileCheck,
+  MapPin,
+  Sun,
+  Zap,
+} from "lucide-react";
 import "./App.css";
-import { getOptions, getRecommendation, healthCheck } from "./api/solarShareApi";
 
-function formatMoney(value) {
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
+const BRAND = {
+  name: "SolarShare",
+  territory: "PSEG Long Island",
+};
+
+const TRUST_MESSAGE =
+  "No roof change. No wires change. You stay with PSEG. You receive solar credits on your PSEG bill.";
+
+const ELIGIBLE_PREFIXES = ["115", "117", "119"]; // simple demo rule
+
+const PROJECTS = [
+  {
+    id: "northport-sun-01",
+    name: "Northport Community Solar",
+    town: "Northport, NY",
+    creditRate: 0.16,
+    payPct: 0.9,
+    savingsLow: 12,
+    savingsHigh: 35,
+    status: "Open",
+    description:
+      "A local community solar farm that applies credits to your PSEG bill. No panels. No wiring. No roof work.",
+  },
+  {
+    id: "huntington-green-02",
+    name: "Huntington Green Credits",
+    town: "Huntington, NY",
+    creditRate: 0.17,
+    payPct: 0.9,
+    savingsLow: 15,
+    savingsHigh: 42,
+    status: "Limited",
+    description:
+      "Limited spots available. Enroll digitally and start seeing credits within 1 to 2 billing cycles.",
+  },
+  {
+    id: "babylon-solar-03",
+    name: "Babylon Solar Collective",
+    town: "Babylon, NY",
+    creditRate: 0.155,
+    payPct: 0.9,
+    savingsLow: 10,
+    savingsHigh: 30,
+    status: "Open",
+    description:
+      "Simple enrollment. Cancel anytime. Your utility service stays the same.",
+  },
+];
+
+function money(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0";
   return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
-function formatPricePerKwh(value) {
-  const num = Number(value);
-  if (Number.isNaN(num)) return "-";
+function pct(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "0%";
+  return `${Math.round(num * 100)}%`;
+}
+
+function perKwh(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0.000/kWh";
   return `$${num.toFixed(3)}/kWh`;
 }
 
-function Badge({ text }) {
+function isEligibleZip(zip) {
+  const z = String(zip || "").trim();
+  if (z.length < 3) return false;
+  return ELIGIBLE_PREFIXES.includes(z.slice(0, 3));
+}
+
+/* FIX: useEffect is the correct hook for side effects (scrolling) */
+function useHashlessScrollTopOnRouteChange() {
+  const loc = useLocation();
+  useMemo(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return null;
+  }, [loc.pathname]);
+}
+
+function PrimaryButton({ children, className = "", ...props }) {
   return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "4px 10px",
-        borderRadius: "999px",
-        fontSize: "12px",
-        border: "1px solid #e2e8f0",
-        background: "#f8fafc",
-        marginRight: "8px",
-        marginBottom: "6px",
-      }}
-    >
-      {text}
-    </span>
+    <button className={`btn btnPrimary ${className}`} {...props}>
+      {children}
+    </button>
   );
 }
 
-function InfoCard({ title, children }) {
+function SecondaryButton({ children, className = "", ...props }) {
   return (
-    <div className="infoCard">
-      <div className="infoTitle">{title}</div>
-      <div className="infoBody">{children}</div>
+    <button className={`btn btnSecondary ${className}`} {...props}>
+      {children}
+    </button>
+  );
+}
+
+function Badge({ children, tone = "neutral" }) {
+  const cls =
+    tone === "good"
+      ? "badge badgeGood"
+      : tone === "warn"
+      ? "badge badgeWarn"
+      : "badge badgeNeutral";
+  return <span className={cls}>{children}</span>;
+}
+
+function Card({ children, className = "" }) {
+  return <div className={`card ${className}`}>{children}</div>;
+}
+
+function Section({ title, subtitle, children }) {
+  return (
+    <section className="section">
+      <div className="sectionHead">
+        <h2 className="sectionTitle">{title}</h2>
+        {subtitle ? <p className="sectionSubtitle">{subtitle}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Layout({ children }) {
+  useHashlessScrollTopOnRouteChange();
+  const navigate = useNavigate();
+
+  function goHome() {
+    navigate("/");
+  }
+
+  function onBrandKeyDown(e) {
+    if (e.key === "Enter" || e.key === " ") goHome();
+  }
+
+  return (
+    <div className="page">
+      <header className="topbar">
+        <div className="topbarInner">
+          <div
+            className="brandLockup"
+            role="banner"
+            onClick={goHome}
+            onKeyDown={onBrandKeyDown}
+            tabIndex={0}
+          >
+            <img
+              className="brandLogo"
+              src="/logo.png"
+              alt={`${BRAND.name} logo`}
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+            <div className="brandMarkFallback" aria-hidden="true" />
+            <div className="brandText">{BRAND.name}</div>
+          </div>
+
+          <nav className="nav" aria-label="Primary">
+            <NavLink
+              to="/"
+              className={({ isActive }) =>
+                isActive ? "navLink navLinkActive" : "navLink"
+              }
+            >
+              Home
+            </NavLink>
+            <NavLink
+              to="/how-it-works"
+              className={({ isActive }) =>
+                isActive ? "navLink navLinkActive" : "navLink"
+              }
+            >
+              How it works
+            </NavLink>
+            <NavLink
+              to="/projects"
+              className={({ isActive }) =>
+                isActive ? "navLink navLinkActive" : "navLink"
+              }
+            >
+              Projects
+            </NavLink>
+            <NavLink
+              to="/faq"
+              className={({ isActive }) =>
+                isActive ? "navLink navLinkActive" : "navLink"
+              }
+            >
+              FAQ
+            </NavLink>
+            <NavLink
+              to="/pricing"
+              className={({ isActive }) =>
+                isActive ? "navLink navLinkActive" : "navLink"
+              }
+            >
+              Pricing
+            </NavLink>
+            <NavLink
+              to="/dashboard"
+              className={({ isActive }) =>
+                isActive ? "navLink navLinkActive" : "navLink"
+              }
+            >
+              Dashboard
+            </NavLink>
+          </nav>
+
+          <div className="topbarCta">
+            <PrimaryButton onClick={() => navigate("/eligibility")}>
+              Check eligibility
+            </PrimaryButton>
+          </div>
+        </div>
+      </header>
+
+      <main className="container">{children}</main>
+
+      <SiteFooter />
     </div>
   );
 }
 
-function ErrorCard({ message }) {
-  if (!message) return null;
+function SiteFooter() {
+  const year = new Date().getFullYear();
+  const repoUrl = "https://github.com/your-username/solarshare";
+
   return (
-    <div className="errorCard" role="alert" aria-live="polite">
-      <div className="errorTitle">Something went wrong</div>
-      <div className="errorMessage">{message}</div>
-    </div>
+    <footer className="footer">
+      <div className="footerInner">
+        <div className="footerLeft">
+          <div className="footerBrand">{BRAND.name}</div>
+          <div className="footerMeta">{TRUST_MESSAGE}</div>
+          <div className="footerMeta">© {year} Educational project</div>
+        </div>
+
+        <div className="footerRight">
+          <a
+            className="footerLink"
+            href={repoUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub repo
+          </a>
+          <span className="footerMeta">Estimates may vary by provider terms</span>
+        </div>
+      </div>
+    </footer>
   );
 }
 
-function App() {
-  const [location, setLocation] = useState("");
-  const [monthlyUsage, setMonthlyUsage] = useState("");
-  const [priority, setPriority] = useState("lowest_cost");
+function Home() {
+  const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(false);
+  return (
+    <>
+      <div className="hero">
+        <div className="heroInner">
+          <h1 className="heroTitle">Get solar savings without installing panels</h1>
+          <p className="heroSubtitle">
+            Enroll in community solar and receive credits on your PSEG Long Island bill.
+          </p>
+
+          <div className="heroActions">
+            <PrimaryButton onClick={() => navigate("/eligibility")}>
+              Check eligibility
+            </PrimaryButton>
+            <SecondaryButton onClick={() => navigate("/how-it-works")}>
+              See how it works
+            </SecondaryButton>
+          </div>
+
+          <div className="trustRow" aria-label="Trust">
+            <div className="trustPill">No equipment</div>
+            <div className="trustPill">No roof changes</div>
+            <div className="trustPill">Cancel anytime</div>
+            <div className="trustPill">Utility compliant</div>
+          </div>
+
+          <div className="downloadRow" aria-label="Downloads">
+            <a className="dlLink" href="/SolarShare-Guide.pdf">
+              <Download size={18} />
+              Download guide
+            </a>
+            <a className="dlLink" href="/CommunitySolar-FAQ.pdf">
+              <Download size={18} />
+              Download FAQ
+            </a>
+          </div>
+
+          <div className="messageBanner">
+            <div className="messageTitle">What stays the same</div>
+            <div className="messageBody">{TRUST_MESSAGE}</div>
+          </div>
+        </div>
+      </div>
+
+      <Card className="wideCard">
+        <div className="sameBlock">
+          <div className="sameIcon" aria-hidden="true">
+            <CheckCircle2 size={22} />
+          </div>
+          <div>
+            <div className="sameTitle">Here is what stays the same</div>
+            <ul className="sameList">
+              <li>No roof change. Your home stays exactly as it is.</li>
+              <li>No wires change. Your electrical setup does not change.</li>
+              <li>You stay with PSEG. They still deliver your electricity.</li>
+              <li>You receive solar credits on your PSEG bill. That is the only change.</li>
+            </ul>
+          </div>
+        </div>
+      </Card>
+
+      <Section
+        title="How it works"
+        subtitle="Four simple steps to start saving with community solar"
+      >
+        <div className="stepsGrid">
+          <StepCard
+            num="1"
+            icon={<MapPin size={22} />}
+            title="Check eligibility"
+            text="Enter your ZIP code to confirm you are in PSEG Long Island territory."
+          />
+          <StepCard
+            num="2"
+            icon={<Sun size={22} />}
+            title="Choose a solar project"
+            text="Select from local community solar farms in your area."
+          />
+          <StepCard
+            num="3"
+            icon={<FileCheck size={22} />}
+            title="Enroll digitally"
+            text="Complete enrollment in minutes with no equipment installation."
+          />
+          <StepCard
+            num="4"
+            icon={<Zap size={22} />}
+            title="Start saving"
+            text="Receive solar credits on your PSEG bill within 1 to 2 billing cycles."
+          />
+        </div>
+
+        <div className="centerRow">
+          <SecondaryButton onClick={() => navigate("/credit-explanation")}>
+            View detailed explanation
+          </SecondaryButton>
+        </div>
+      </Section>
+
+      <Section
+        title="Frequently asked questions"
+        subtitle="Everything you need to know about community solar"
+      >
+        <div className="faqPreviewGrid">
+          <MiniFaq
+            q="Do I switch utilities?"
+            a="No. PSEG still delivers electricity and sends your bill."
+          />
+          <MiniFaq q="Do I install equipment?" a="No panels, no wiring, no roof work." />
+          <MiniFaq
+            q="How do I receive savings?"
+            a="Solar credits appear on your PSEG bill and reduce what you owe."
+          />
+          <MiniFaq q="Can I cancel?" a="Yes, you can cancel anytime." />
+        </div>
+
+        <div className="centerRow">
+          <SecondaryButton onClick={() => navigate("/faq")}>See all FAQs</SecondaryButton>
+        </div>
+      </Section>
+
+      <CallToAction />
+    </>
+  );
+}
+
+function StepCard({ num, icon, title, text }) {
+  return (
+    <Card className="stepCard">
+      <div className="stepNum">{num}</div>
+      <div className="stepIcon" aria-hidden="true">
+        {icon}
+      </div>
+      <div className="stepTitle">{title}</div>
+      <div className="stepText">{text}</div>
+    </Card>
+  );
+}
+
+function MiniFaq({ q, a }) {
+  return (
+    <Card className="miniFaq">
+      <div className="miniFaqQ">{q}</div>
+      <div className="miniFaqA">{a}</div>
+    </Card>
+  );
+}
+
+function CallToAction() {
+  const navigate = useNavigate();
+  return (
+    <section className="ctaBand">
+      <div className="ctaInner">
+        <div className="ctaTitle">Ready to start saving?</div>
+        <div className="ctaText">
+          Check if community solar is available in your area. Takes less than 30 seconds.
+        </div>
+        <div className="ctaActions">
+          <button className="ctaBtn" onClick={() => navigate("/eligibility")}>
+            Check eligibility now
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* Eligibility page */
+function Eligibility() {
+  const navigate = useNavigate();
+
+  const [zip, setZip] = useState("");
+  const [whyOpen, setWhyOpen] = useState(false);
   const [error, setError] = useState("");
 
-  const [options, setOptions] = useState(null);
-  const [recommendation, setRecommendation] = useState(null);
+  function verify() {
+    const z = zip.trim();
 
-  // TODO: Replace this with your real GitHub repo URL
-  const GITHUB_REPO_URL = "https://github.com/YOUR_USERNAME/YOUR_REPO";
-
-  const requestPayload = useMemo(() => {
-    return {
-      location: location.trim(),
-      monthly_usage_kwh: Number(monthlyUsage),
-      priority,
-    };
-  }, [location, monthlyUsage, priority]);
-
-  const spotlight = useMemo(() => {
-    if (!Array.isArray(options) || options.length === 0) return null;
-    const rec = options.find((x) => x.is_recommended);
-    return rec || options[0];
-  }, [options]);
-
-  function validate() {
-    if (!requestPayload.location) return "Location is required.";
-    if (
-      !Number.isFinite(requestPayload.monthly_usage_kwh) ||
-      requestPayload.monthly_usage_kwh <= 0
-    ) {
-      return "Monthly usage must be a number greater than 0.";
-    }
-    if (!requestPayload.priority) return "Priority is required.";
-    return "";
-  }
-
-  async function handleHealthCheck() {
-    setError("");
-    setLoading(true);
-    try {
-      const res = await healthCheck();
-      alert(`Backend OK: ${res.status} (v${res.version})`);
-    } catch (e) {
-      setError(`Health check failed: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleGetOptions() {
-    const msg = validate();
-    if (msg) {
-      setError(msg);
+    if (!/^\d{5}$/.test(z)) {
+      setError("Please enter a 5 digit ZIP code.");
       return;
     }
 
     setError("");
-    setLoading(true);
-    setRecommendation(null);
-
-    try {
-      const res = await getOptions(requestPayload);
-      setOptions(res);
-      if (!Array.isArray(res) || res.length === 0) {
-        setError("No options found for this location.");
-      }
-    } catch (e) {
-      setError(e.message);
-      setOptions(null);
-    } finally {
-      setLoading(false);
-    }
+    navigate(`/eligibility/result?zip=${encodeURIComponent(z)}`);
   }
-
-  async function handleGetRecommendation() {
-    const msg = validate();
-    if (msg) {
-      setError(msg);
-      return;
-    }
-
-    setError("");
-    setLoading(true);
-    setOptions(null);
-
-    try {
-      const res = await getRecommendation(requestPayload);
-      setRecommendation(res);
-      if (!res?.recommended_option) {
-        setError("No recommendation available for this location.");
-      }
-    } catch (e) {
-      setError(e.message);
-      setRecommendation(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const year = new Date().getFullYear();
-
-  const hasAnyResult =
-    Boolean(spotlight) || Boolean(options) || Boolean(recommendation);
-
-  const showEmptyState =
-    !loading &&
-    !error &&
-    !hasAnyResult &&
-    location.trim().length === 0 &&
-    String(monthlyUsage).trim().length === 0;
-
-  const showHintState =
-    !loading &&
-    !error &&
-    !hasAnyResult &&
-    (location.trim().length > 0 || String(monthlyUsage).trim().length > 0);
 
   return (
-    <div className="container">
-      <div className="bg-logo" />
-
-      <div className="header">
-        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-          <img
-            src="/logo.png"
-            alt="SolarShare logo"
-            style={{
-              width: "64px",
-              height: "64px",
-              filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.15))",
-            }}
-          />
-
-          <div className="brand">
-            <h1>SolarShare</h1>
-            <p>
-              Compare local clean energy options and get a clear recommendation
-              in dollars.
-            </p>
-          </div>
-        </div>
-
-        <button
-          className="secondary"
-          onClick={handleHealthCheck}
-          disabled={loading}
-        >
-          Test Backend
-        </button>
-      </div>
-
-      {/* ABOUT (NEW) */}
-      <div className="about">
-        <div className="aboutTitle">About SolarShare</div>
-        <div className="aboutText">
-          SolarShare is an educational project that compares clean energy options
-          based on your location and estimated monthly electricity usage. It
-          returns cost estimates and highlights potential savings for easy
-          side-by-side comparison. Estimates are informational and can vary
-          based on provider fees and plan terms.
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="field">
-          <label>Location</label>
-          <input
-            type="text"
-            placeholder="e.g. Long Island, NY"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label>Monthly usage (kWh)</label>
-          <input
-            type="number"
-            placeholder="e.g. 650"
-            value={monthlyUsage}
-            onChange={(e) => setMonthlyUsage(e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label>Priority</label>
-          <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-            <option value="lowest_cost">Lowest cost</option>
-            <option value="closest">Closest</option>
-            <option value="most_reliable">Most reliable</option>
-          </select>
-        </div>
-
-        <div className="actions">
-          <button className="primary" onClick={handleGetOptions} disabled={loading}>
-            {loading ? "Loading..." : "Get Options"}
-          </button>
-          <button
-            className="secondary"
-            onClick={handleGetRecommendation}
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "Get Recommendation"}
-          </button>
-        </div>
-      </div>
-
-      {/* ERROR UI CARD (NEW) */}
-      <ErrorCard message={error} />
-
-      {/* LOADING / EMPTY STATES (NEW) */}
-      {loading ? (
-        <InfoCard title="Loading">
-          We’re contacting the backend and calculating estimates.
-        </InfoCard>
-      ) : null}
-
-      {showEmptyState ? (
-        <InfoCard title="Ready when you are">
-          Enter your location and monthly usage to see recommendations.
-        </InfoCard>
-      ) : null}
-
-      {showHintState ? (
-        <InfoCard title="Almost there">
-          Add any missing fields above, then click Get Options or Get Recommendation.
-        </InfoCard>
-      ) : null}
-
-      {/* HOW IT WORKS */}
-      <div className="howItWorks">
-        <div className="howHeader">
-          <h2 className="howTitle">How SolarShare works</h2>
-          <p className="howSubtitle">
-            A quick way to compare clean energy options using your location,
-            usage, and what you care about most.
+    <div className="eligibilityWrap">
+      <div className="eligibilityHero">
+        <div className="eligibilityHeroInner">
+          <h1 className="eligibilityTitle">Check eligibility in seconds</h1>
+          <p className="eligibilitySubtitle">
+            We currently support {BRAND.territory} territory.
           </p>
-        </div>
 
-        <div className="howGrid">
-          <div className="howStep">
-            <div className="howNum">1</div>
-            <div>
-              <div className="howStepTitle">Enter your details</div>
-              <div className="howStepText">
-                Add your location and monthly kWh usage so we can estimate your
-                monthly cost.
+          <div className="eligibilityCard">
+            {error ? (
+              <div className="errorCard">
+                <div className="errorTitle">Action needed</div>
+                <div className="errorBody">{error}</div>
               </div>
+            ) : null}
+
+            <div className="zipBlock">
+              <label className="label" htmlFor="zip">
+                ZIP code
+              </label>
+
+              <div className="zipRow">
+                <input
+                  id="zip"
+                  className="input zipInput"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  value={zip}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^\d]/g, "").slice(0, 5);
+                    setZip(next);
+                    if (error) setError("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") verify();
+                  }}
+                  placeholder="e.g. 11743"
+                />
+
+                <PrimaryButton onClick={verify} className="zipBtn">
+                  <ExternalLink size={18} style={{ marginRight: 8 }} />
+                  Verify eligibility
+                </PrimaryButton>
+              </div>
+
+              <button
+                className="whyLink"
+                type="button"
+                onClick={() => setWhyOpen((v) => !v)}
+                aria-expanded={whyOpen}
+              >
+                Why do we ask for ZIP?
+              </button>
+
+              {whyOpen ? (
+                <div className="helperBox">
+                  We use your ZIP code only to confirm you are in the {BRAND.territory} service area, so we show options
+                  that apply credits correctly.
+                </div>
+              ) : null}
+
+              <div className="eligibilityHelper">Core message: {TRUST_MESSAGE}</div>
             </div>
           </div>
 
-          <div className="howStep">
-            <div className="howNum">2</div>
-            <div>
-              <div className="howStepTitle">Compare plans</div>
-              <div className="howStepText">
-                We rank available options by effective price and show estimated
-                savings versus a baseline.
-              </div>
-            </div>
+          <div className="eligibilityTrustRow" aria-label="Trust">
+            <div className="trustPill">No equipment</div>
+            <div className="trustPill">No roof changes</div>
+            <div className="trustPill">Cancel anytime</div>
+            <div className="trustPill">Utility compliant</div>
           </div>
-
-          <div className="howStep">
-            <div className="howNum">3</div>
-            <div>
-              <div className="howStepTitle">Get a recommendation</div>
-              <div className="howStepText">
-                Choose a priority like lowest cost, closest, or most reliable
-                and we highlight the best match.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="howNote">
-          Estimates are informational. Your exact bill can vary based on fees,
-          time-of-use rates, and provider terms.
         </div>
       </div>
-
-      {/* SPOTLIGHT */}
-      {spotlight ? (
-        <div className="spotlight">
-          <div className="spotlightTitle">Recommended option</div>
-
-          <div className="spotlightMain">
-            <div>
-              <div className="spotlightName">{spotlight.option.provider_name}</div>
-              <p className="spotlightReason">
-                Best match based on your priority and the effective price score.
-              </p>
-            </div>
-
-            <div className="savingsViz">
-              {(() => {
-                const recommendedMonthly = Number(spotlight.monthly_cost);
-                const savings = Number(spotlight.savings_vs_baseline);
-
-                if (!Number.isFinite(recommendedMonthly) || !Number.isFinite(savings))
-                  return null;
-
-                const baselineMonthly = recommendedMonthly + savings;
-                const maxVal = Math.max(baselineMonthly, recommendedMonthly, 1);
-
-                const baselinePct = Math.round((baselineMonthly / maxVal) * 100);
-                const recommendedPct = Math.round((recommendedMonthly / maxVal) * 100);
-
-                const yearlySavings = savings * 12;
-
-                return (
-                  <>
-                    <div className="spotlightTitle">Savings comparison</div>
-
-                    <div className="barsRow">
-                      <div className="barItem">
-                        <div className="barLabel">Baseline</div>
-                        <div className="barTrack">
-                          <div
-                            className="barFill"
-                            style={{
-                              width: `${baselinePct}%`,
-                              background: "rgba(148, 163, 184, 0.9)",
-                            }}
-                          />
-                        </div>
-                        <div className="barValue">{formatMoney(baselineMonthly)}</div>
-                      </div>
-
-                      <div className="barItem">
-                        <div className="barLabel">Recommended</div>
-                        <div className="barTrack">
-                          <div
-                            className="barFill"
-                            style={{
-                              width: `${recommendedPct}%`,
-                              background: "rgba(34, 197, 94, 0.95)",
-                            }}
-                          />
-                        </div>
-                        <div className="barValue">{formatMoney(recommendedMonthly)}</div>
-                      </div>
-                    </div>
-
-                    <div className="smallHint">
-                      Estimated savings: {formatMoney(savings)} per month (
-                      {formatMoney(yearlySavings)} per year).
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            <Badge text="Recommended" />
-          </div>
-
-          <div className="kpis">
-            <div className="kpi">
-              <div className="kpiLabel">Effective price</div>
-              <div className="kpiValue">{formatPricePerKwh(spotlight.effective_price)}</div>
-            </div>
-
-            <div className="kpi">
-              <div className="kpiLabel">Monthly cost</div>
-              <div className="kpiValue">{formatMoney(spotlight.monthly_cost)}</div>
-            </div>
-
-            <div className="kpi">
-              <div className="kpiLabel">Savings vs baseline</div>
-              <div className="kpiValue">{formatMoney(spotlight.savings_vs_baseline)}</div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* OPTIONS TABLE */}
-      {options ? (
-        <div className="card" style={{ marginTop: "18px" }}>
-          <h2 style={{ marginTop: 0 }}>Ranked Options</h2>
-
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                  <th style={{ padding: "10px 8px" }}>Provider</th>
-                  <th style={{ padding: "10px 8px" }}>Plan</th>
-                  <th style={{ padding: "10px 8px" }}>Effective price</th>
-                  <th style={{ padding: "10px 8px" }}>Monthly cost</th>
-                  <th style={{ padding: "10px 8px" }}>Savings</th>
-                  <th style={{ padding: "10px 8px" }}>Badges</th>
-                </tr>
-              </thead>
-              <tbody>
-                {options.map((row) => {
-                  const isRec = row.is_recommended;
-                  return (
-                    <tr
-                      key={row.option.id}
-                      style={{
-                        borderBottom: "1px solid #f1f5f9",
-                        background: isRec ? "#eff6ff" : "transparent",
-                      }}
-                    >
-                      <td style={{ padding: "10px 8px" }}>{row.option.provider_name}</td>
-                      <td style={{ padding: "10px 8px" }}>{row.option.utility_plan_name}</td>
-                      <td style={{ padding: "10px 8px" }}>
-                        {formatPricePerKwh(row.effective_price)}
-                      </td>
-                      <td style={{ padding: "10px 8px" }}>{formatMoney(row.monthly_cost)}</td>
-                      <td style={{ padding: "10px 8px" }}>
-                        {formatMoney(row.savings_vs_baseline)}
-                      </td>
-                      <td style={{ padding: "10px 8px" }}>
-                        {isRec ? <Badge text="Recommended" /> : null}
-                        {(row.badges || []).map((b) => (
-                          <Badge key={b} text={b} />
-                        ))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
-
-      {/* RECOMMENDATION CARD */}
-      {recommendation ? (
-        <div className="card" style={{ marginTop: "18px" }}>
-          <h2 style={{ marginTop: 0 }}>Recommendation</h2>
-
-          <div style={{ marginTop: "10px" }}>
-            <div style={{ fontSize: "16px", marginBottom: "6px" }}>
-              {recommendation.recommended_option?.option?.provider_name}
-            </div>
-
-            <div style={{ color: "#475569", marginBottom: "12px" }}>
-              {recommendation.reason}
-            </div>
-
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <Badge
-                text={`Plan: ${recommendation.recommended_option?.option?.utility_plan_name}`}
-              />
-              <Badge
-                text={`Effective: ${formatPricePerKwh(
-                  recommendation.recommended_option?.effective_price
-                )}`}
-              />
-              <Badge
-                text={`Monthly: ${formatMoney(recommendation.recommended_option?.monthly_cost)}`}
-              />
-              <Badge
-                text={`Savings: ${formatMoney(
-                  recommendation.recommended_option?.savings_vs_baseline
-                )}`}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* FAQs (title only, no “Trust”) */}
-      <div className="faq">
-        <div className="faqHeader">
-          <h2 className="faqTitle">FAQs</h2>
-          <p className="faqSubtitle">
-            Clear answers so you understand how SolarShare estimates costs and savings.
-          </p>
-        </div>
-
-        <details className="faqItem">
-          <summary className="faqQ">How does SolarShare calculate savings?</summary>
-          <div className="faqA">
-            We estimate monthly cost for each option using your monthly kWh usage and
-            the option’s effective price. Savings are shown as the difference between
-            a baseline estimate and the option estimate.
-          </div>
-        </details>
-
-        <details className="faqItem">
-          <summary className="faqQ">What is the baseline?</summary>
-          <div className="faqA">
-            The baseline is an estimated monthly cost used as a comparison point. It
-            helps you quickly see whether an option is likely to cost more or less.
-          </div>
-        </details>
-
-        <details className="faqItem">
-          <summary className="faqQ">Why might my real bill be different?</summary>
-          <div className="faqA">
-            Bills can vary due to provider fees, taxes, time-of-use rates, and plan
-            terms. SolarShare provides estimates for comparison, not an exact bill.
-          </div>
-        </details>
-
-        <details className="faqItem">
-          <summary className="faqQ">Do you store my location or usage?</summary>
-          <div className="faqA">
-            In this version, inputs are used only to request results and are not
-            stored after a refresh. If accounts are added later, the app will show
-            a clear privacy explanation before saving anything.
-          </div>
-        </details>
-      </div>
-
-      {/* FOOTER */}
-      <footer className="footer">
-        <div className="footerInner">
-          <div className="footerLeft">
-            <div className="footerBrand">SolarShare</div>
-            <div className="footerMeta">© {year} Educational project</div>
-          </div>
-
-          <div className="footerRight">
-            <a className="footerLink" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
-              GitHub
-            </a>
-            <span className="footerDot">•</span>
-            <span className="footerMeta">Estimates may vary by provider terms</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
 
-export default App;
+function EligibilityResult() {
+  const navigate = useNavigate();
+  const loc = useLocation();
+  const params = new URLSearchParams(loc.search);
+  const zip = params.get("zip") || "";
+  const eligible = isEligibleZip(zip);
+
+  const [email, setEmail] = useState("");
+  const [joined, setJoined] = useState(false);
+
+  return (
+    <Section title="Eligibility result" subtitle={`ZIP checked: ${zip || "unknown"}`}>
+      <Card>
+        {eligible ? (
+          <>
+            <div className="resultRow">
+              <div className="resultIconGood" aria-hidden="true" />
+              <div>
+                <div className="resultTitle">You are eligible in PSEG Long Island</div>
+                <div className="resultBody">Next, view available community solar projects near you.</div>
+              </div>
+            </div>
+
+            <div className="rowActions">
+              <PrimaryButton onClick={() => navigate("/projects")}>
+                View available solar projects
+              </PrimaryButton>
+              <SecondaryButton onClick={() => navigate("/credit-explanation")}>
+                How credits work
+              </SecondaryButton>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="resultRow">
+              <div className="resultIconNeutral" aria-hidden="true" />
+              <div>
+                <div className="resultTitle">Not supported yet</div>
+                <div className="resultBody">
+                  Join the waitlist and we will notify you when your area is available.
+                </div>
+              </div>
+            </div>
+
+            <div className="waitlistRow">
+              <input
+                className="input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email address"
+              />
+              <PrimaryButton
+                onClick={() => {
+                  if (!email.trim()) return;
+                  setJoined(true);
+                }}
+              >
+                Join waitlist
+              </PrimaryButton>
+            </div>
+
+            {joined ? <div className="helperBox">You are on the list. Thank you.</div> : null}
+          </>
+        )}
+
+        <div className="helperText">{TRUST_MESSAGE}</div>
+      </Card>
+    </Section>
+  );
+}
+
+function Projects() {
+  const navigate = useNavigate();
+
+  return (
+    <Section
+      title="Available community solar projects"
+      subtitle="Choose a project. Enroll digitally. Cancel anytime."
+    >
+      <div className="projectsGrid">
+        {PROJECTS.map((p) => {
+          const tone = p.status === "Limited" ? "warn" : "good";
+          return (
+            <Card key={p.id} className="projectCard">
+              <div className="projectTop">
+                <div>
+                  <div className="projectName">{p.name}</div>
+                  <div className="projectTown">{p.town}</div>
+                </div>
+                <Badge tone={tone}>
+                  {p.status === "Limited" ? "Limited spots" : "Open"}
+                </Badge>
+              </div>
+
+              <div className="projectStats">
+                <div className="stat">
+                  <div className="statLabel">Estimated bill credit rate</div>
+                  <div className="statValue">{perKwh(p.creditRate)} credit</div>
+                </div>
+                <div className="stat">
+                  <div className="statLabel">Discount to subscriber</div>
+                  <div className="statValue">Pay about {pct(p.payPct)} of credit value</div>
+                </div>
+                <div className="stat">
+                  <div className="statLabel">Estimated monthly savings</div>
+                  <div className="statValue">
+                    {money(p.savingsLow)} to {money(p.savingsHigh)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rowActions">
+                <SecondaryButton onClick={() => navigate(`/projects/${p.id}`)}>
+                  View details
+                </SecondaryButton>
+                <PrimaryButton onClick={() => navigate(`/projects/${p.id}?select=1`)}>
+                  Select this project
+                </PrimaryButton>
+              </div>
+
+              <div className="helperText">{TRUST_MESSAGE}</div>
+            </Card>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+/* FIXED + upgraded ProjectDetail (adds back button + selected banner + uses bill input) */
+function ProjectDetail() {
+  const navigate = useNavigate();
+  const { projectId } = useParams();
+  const loc = useLocation();
+  const selected = new URLSearchParams(loc.search).get("select") === "1";
+
+  const project = PROJECTS.find((p) => p.id === projectId);
+
+  const [usage, setUsage] = useState(650);
+  const [bill, setBill] = useState("");
+
+  const estimate = useMemo(() => {
+    if (!project) return { month: 0, year: 0, percent: null };
+
+    const kwh = Number(usage);
+    const creditValue = kwh * project.creditRate;
+    const subscriberPays = creditValue * project.payPct;
+    const savings = Math.max(creditValue - subscriberPays, 0);
+
+    // optional: if user types a bill amount, show % saved
+    const billNum = Number(bill);
+    const percent =
+      Number.isFinite(billNum) && billNum > 0 ? Math.min(savings / billNum, 1) : null;
+
+    return { month: savings, year: savings * 12, percent };
+  }, [usage, bill, project]);
+
+  if (!project) {
+    return (
+      <Section title="Project not found" subtitle="Please go back to projects.">
+        <Card>
+          <SecondaryButton onClick={() => navigate("/projects")}>
+            Back to projects
+          </SecondaryButton>
+        </Card>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title={project.name} subtitle={project.town}>
+      <div className="rowActions" style={{ marginTop: 0, marginBottom: 12 }}>
+        <SecondaryButton onClick={() => navigate("/projects")}>
+          Back to projects
+        </SecondaryButton>
+        {selected ? (
+          <div className="helperBox" style={{ marginTop: 0 }}>
+            This project is selected. Next step is enrollment.
+          </div>
+        ) : null}
+      </div>
+
+      <Card>
+        <div className="detailGrid">
+          <div>
+            <div className="detailLabel">Summary</div>
+            <div className="detailText">{project.description}</div>
+
+            <div className="detailBullets">
+              <div className="bullet">You stay with PSEG. They still deliver power.</div>
+              <div className="bullet">No panels. No wiring. No roof work.</div>
+              <div className="bullet">Credits typically show in 1 to 2 billing cycles.</div>
+            </div>
+
+            <div className="detailActions">
+              <PrimaryButton
+                onClick={() => navigate("/enrollment", { state: { projectId: project.id } })}
+              >
+                Enroll in 3 minutes
+              </PrimaryButton>
+              <SecondaryButton onClick={() => navigate("/credit-explanation")}>
+                How credits work
+              </SecondaryButton>
+            </div>
+
+            <div className="helperText">{TRUST_MESSAGE}</div>
+          </div>
+
+          <div>
+            <div className="calcCard">
+              <div className="calcTitle">Savings estimate</div>
+
+              <div className="formRow">
+                <label className="label">Monthly usage (kWh)</label>
+                <input
+                  className="range"
+                  type="range"
+                  min="200"
+                  max="1400"
+                  step="25"
+                  value={usage}
+                  onChange={(e) => setUsage(Number(e.target.value))}
+                />
+                <div className="rangeMeta">{usage} kWh</div>
+              </div>
+
+              <div className="formRow">
+                <label className="label">Bill amount (optional)</label>
+                <input
+                  className="input"
+                  value={bill}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^\d.]/g, "");
+                    setBill(next);
+                  }}
+                  placeholder="e.g. 180"
+                  inputMode="decimal"
+                />
+                <div className="helperText">
+                  Optional. If you enter a bill amount, we can show a rough percent saved.
+                </div>
+              </div>
+
+              <div className="calcResult">
+                <div className="calcBig">
+                  Estimated savings: {money(estimate.month)} per month
+                </div>
+                <div className="calcSmall">{money(estimate.year)} per year</div>
+                {estimate.percent != null ? (
+                  <div className="calcSmall">
+                    Roughly {Math.round(estimate.percent * 100)}% of your bill
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rowActions">
+                <PrimaryButton
+                  onClick={() => navigate("/enrollment", { state: { projectId: project.id } })}
+                >
+                  Continue to enrollment
+                </PrimaryButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Section>
+  );
+}
+
+function CreditExplanation() {
+  const navigate = useNavigate();
+  return (
+    <Section
+      title="How you save with solar credits"
+      subtitle="A simple explanation of what changes and what stays the same."
+    >
+      <Card>
+        <div className="diagram">
+          <div className="node">Solar farm</div>
+          <div className="arrow" aria-hidden="true" />
+          <div className="node">Grid</div>
+          <div className="arrow" aria-hidden="true" />
+          <div className="node">PSEG measures</div>
+          <div className="arrow" aria-hidden="true" />
+          <div className="node">SolarShare allocates credits</div>
+          <div className="arrow" aria-hidden="true" />
+          <div className="node">Your PSEG bill is reduced</div>
+        </div>
+
+        <div className="callouts">
+          <div className="callout">
+            <div className="calloutTitle">You still receive electricity from PSEG</div>
+            <div className="calloutBody">
+              Your utility service does not change. Only the bill changes via credits.
+            </div>
+          </div>
+
+          <div className="callout">
+            <div className="calloutTitle">Only the bill changes via credits</div>
+            <div className="calloutBody">
+              Credits are applied to your bill and reduce what you owe each month.
+            </div>
+          </div>
+
+          <div className="callout">
+            <div className="calloutTitle">Credits appear in 1 to 2 billing cycles</div>
+            <div className="calloutBody">
+              Timing varies slightly, but most customers see credits quickly.
+            </div>
+          </div>
+        </div>
+
+        <div className="rowActions">
+          <PrimaryButton onClick={() => navigate("/eligibility")}>Continue</PrimaryButton>
+          <SecondaryButton onClick={() => navigate("/projects")}>Browse projects</SecondaryButton>
+        </div>
+
+        <div className="helperText">{TRUST_MESSAGE}</div>
+      </Card>
+    </Section>
+  );
+}
+
+function HowItWorksPage() {
+  const navigate = useNavigate();
+  return (
+    <Section title="How it works" subtitle="Clear steps from ZIP check to monthly savings.">
+      <Card>
+        <div className="timeline">
+          <TimelineItem
+            title="Enter ZIP and confirm territory"
+            text="We confirm you are in PSEG Long Island so credits apply correctly."
+          />
+          <TimelineItem
+            title="Choose a local community solar project"
+            text="Pick a project with open spots or limited spots."
+          />
+          <TimelineItem
+            title="Enroll digitally with no equipment"
+            text="A lightweight form. No roof changes. No wiring."
+          />
+          <TimelineItem
+            title="Solar produces and PSEG applies credits"
+            text="SolarShare allocates credits and they appear on your PSEG bill."
+          />
+          <TimelineItem title="You see savings monthly" text="Credits reduce what you owe each month. Cancel anytime." />
+        </div>
+
+        <div className="rowActions">
+          <PrimaryButton onClick={() => navigate("/eligibility")}>
+            Start eligibility check
+          </PrimaryButton>
+        </div>
+
+        <div className="helperText">{TRUST_MESSAGE}</div>
+      </Card>
+    </Section>
+  );
+}
+
+function TimelineItem({ title, text }) {
+  return (
+    <div className="timelineItem">
+      <div className="timelineDot" aria-hidden="true" />
+      <div>
+        <div className="timelineTitle">{title}</div>
+        <div className="timelineText">{text}</div>
+      </div>
+    </div>
+  );
+}
+
+function Enrollment() {
+  const navigate = useNavigate();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [ack1, setAck1] = useState(false);
+  const [ack2, setAck2] = useState(false);
+  const [ack3, setAck3] = useState(false);
+  const [error, setError] = useState("");
+
+  function submit() {
+    if (!name.trim() || !email.trim() || !address.trim()) {
+      setError("Please fill out name, email, and address.");
+      return;
+    }
+    if (!ack1 || !ack2 || !ack3) {
+      setError("Please check all acknowledgements to continue.");
+      return;
+    }
+    setError("");
+    navigate("/dashboard?status=submitted");
+  }
+
+  return (
+    <Section title="Enrollment" subtitle="Complete enrollment in minutes. No equipment installation.">
+      <Card>
+        {error ? (
+          <div className="errorCard">
+            <div className="errorTitle">Action needed</div>
+            <div className="errorText">{error}</div>
+          </div>
+        ) : null}
+
+        <div className="formGrid">
+          <div className="formRow">
+            <label className="label">Name</label>
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full name"
+            />
+          </div>
+
+          <div className="formRow">
+            <label className="label">Email</label>
+            <input
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@email.com"
+            />
+          </div>
+
+          <div className="formRow">
+            <label className="label">Address</label>
+            <input
+              className="input"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Street, City, NY"
+            />
+          </div>
+
+          <div className="formRow">
+            <label className="label">Utility</label>
+            <input className="input" value={BRAND.territory} disabled />
+          </div>
+        </div>
+
+        <div className="checks">
+          <label className="checkRow">
+            <input
+              type="checkbox"
+              checked={ack1}
+              onChange={(e) => setAck1(e.target.checked)}
+            />
+            <span>No roof changes</span>
+          </label>
+          <label className="checkRow">
+            <input
+              type="checkbox"
+              checked={ack2}
+              onChange={(e) => setAck2(e.target.checked)}
+            />
+            <span>No utility switching</span>
+          </label>
+          <label className="checkRow">
+            <input
+              type="checkbox"
+              checked={ack3}
+              onChange={(e) => setAck3(e.target.checked)}
+            />
+            <span>Cancel anytime</span>
+          </label>
+        </div>
+
+        <div className="rowActions">
+          <PrimaryButton onClick={submit}>Submit enrollment</PrimaryButton>
+          <SecondaryButton onClick={() => navigate("/projects")}>
+            Save and continue later
+          </SecondaryButton>
+        </div>
+
+        <div className="helperText">{TRUST_MESSAGE}</div>
+      </Card>
+    </Section>
+  );
+}
+
+function Dashboard() {
+  const loc = useLocation();
+  const params = new URLSearchParams(loc.search);
+  const status = params.get("status") || "credits_active";
+
+  const steps = [
+    { key: "submitted", label: "Submitted" },
+    { key: "approved", label: "Approved" },
+    { key: "credits_active", label: "Credits active" },
+  ];
+
+  const activeIndex = Math.max(0, steps.findIndex((s) => s.key === status));
+
+  return (
+    <Section title="Dashboard" subtitle="Your enrollment status and savings at a glance.">
+      <div className="dashGrid">
+        <Card>
+          <div className="dashTitle">Current project</div>
+          <div className="dashBig">Northport Community Solar</div>
+          <div className="dashMeta">Utility: {BRAND.territory}</div>
+          <div className="dashMeta">{TRUST_MESSAGE}</div>
+        </Card>
+
+        <Card>
+          <div className="dashTitle">Estimated savings this month</div>
+          <div className="dashBig">{money(28)}</div>
+          <div className="dashMeta">Estimate based on recent usage and credit rate</div>
+        </Card>
+
+        <Card>
+          <div className="dashTitle">Credits expected next bill date</div>
+          <div className="dashBig">Mar 10</div>
+          <div className="dashMeta">Timing varies. Usually 1 to 2 billing cycles</div>
+        </Card>
+
+        <Card className="dashWide">
+          <div className="dashTitle">Status tracker</div>
+          <div className="tracker">
+            {steps.map((s, idx) => {
+              const done = idx <= activeIndex;
+              return (
+                <div
+                  key={s.key}
+                  className={done ? "trackStep trackStepDone" : "trackStep"}
+                >
+                  <div className="trackDot" aria-hidden="true" />
+                  <div className="trackLabel">{s.label}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rowActions">
+            <SecondaryButton onClick={() => alert("Credit details page can be added next.")}>
+              View credit details
+            </SecondaryButton>
+            <SecondaryButton onClick={() => alert("Manage enrollment page can be added next.")}>
+              Manage enrollment
+            </SecondaryButton>
+            <button
+              className="btn btnDanger"
+              onClick={() => alert("Cancel flow can be added next.")}
+              type="button"
+            >
+              Cancel subscription
+            </button>
+          </div>
+        </Card>
+      </div>
+    </Section>
+  );
+}
+
+function FaqPage() {
+  return (
+    <Section title="FAQ" subtitle="Big, readable answers with clear next steps.">
+      <Card>
+        <div className="faqList">
+          <FaqItem q="Do I switch utilities?" a="No. PSEG still delivers electricity and sends your bill." />
+          <FaqItem q="Do I install equipment?" a="No panels, no wiring, no roof work." />
+          <FaqItem q="How do I receive savings?" a="Solar credits appear on your PSEG bill and reduce what you owe." />
+          <FaqItem q="Can I cancel?" a="Yes, you can cancel anytime." />
+          <FaqItem q="When do credits start?" a="Typically 1 to 2 billing cycles." />
+        </div>
+
+        <div className="supportBox">
+          <div className="supportTitle">Need help?</div>
+          <div className="supportText">
+            Contact support and we will help you understand credits, billing, and enrollment.
+          </div>
+          <div className="supportActions">
+            <SecondaryButton onClick={() => alert("Support page can be added next.")}>
+              Contact support
+            </SecondaryButton>
+          </div>
+        </div>
+
+        <div className="helperText">{TRUST_MESSAGE}</div>
+      </Card>
+    </Section>
+  );
+}
+
+function FaqItem({ q, a }) {
+  return (
+    <details className="faqItem">
+      <summary className="faqQ">{q}</summary>
+      <div className="faqA">{a}</div>
+    </details>
+  );
+}
+
+function Pricing() {
+  return (
+    <Section title="Pricing" subtitle="Community solar enrollment is designed to be simple.">
+      <div className="pricingGrid">
+        <Card>
+          <div className="priceTitle">Pay as you save</div>
+          <div className="priceBig">No upfront equipment</div>
+          <div className="priceText">
+            You pay a discounted portion of the credit value and keep the difference as savings.
+          </div>
+          <div className="priceFoot">{TRUST_MESSAGE}</div>
+        </Card>
+
+        <Card>
+          <div className="priceTitle">Cancel anytime</div>
+          <div className="priceBig">No long term lock in</div>
+          <div className="priceText">
+            If your needs change, you can cancel. Your utility service stays the same.
+          </div>
+          <div className="priceFoot">{TRUST_MESSAGE}</div>
+        </Card>
+      </div>
+    </Section>
+  );
+}
+
+export default function App() {
+  return (
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/eligibility" element={<Eligibility />} />
+        <Route path="/eligibility/result" element={<EligibilityResult />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/:projectId" element={<ProjectDetail />} />
+        <Route path="/credit-explanation" element={<CreditExplanation />} />
+        <Route path="/how-it-works" element={<HowItWorksPage />} />
+        <Route path="/enrollment" element={<Enrollment />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/faq" element={<FaqPage />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="*" element={<Home />} />
+      </Routes>
+    </Layout>
+  );
+}
