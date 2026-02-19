@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   NavLink,
   Route,
@@ -92,13 +92,12 @@ function isEligibleZip(zip) {
   return ELIGIBLE_PREFIXES.includes(z.slice(0, 3));
 }
 
-/* FIX: useEffect is the correct hook for side effects (scrolling) */
+/* side effect: scroll to top when route changes */
 function useHashlessScrollTopOnRouteChange() {
   const loc = useLocation();
-  useMemo(() => {
+  useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
-    return null;
-  }, [loc.pathname]);
+  }, [loc.pathname, loc.search]);
 }
 
 function PrimaryButton({ children, className = "", ...props }) {
@@ -114,6 +113,17 @@ function SecondaryButton({ children, className = "", ...props }) {
     <button className={`btn btnSecondary ${className}`} {...props}>
       {children}
     </button>
+  );
+}
+
+function Pill({ icon, children }) {
+  return (
+    <div className="trustPill">
+      <span className="pillIcon" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="pillText">{children}</span>
+    </div>
   );
 }
 
@@ -278,60 +288,156 @@ function Home() {
 
   return (
     <>
-      <div className="hero">
-        <div className="heroInner">
-          <h1 className="heroTitle">Get solar savings without installing panels</h1>
-          <p className="heroSubtitle">
-            Enroll in community solar and receive credits on your PSEG Long Island bill.
-          </p>
+      {/* HERO WITH BACKGROUND IMAGE FROM /public */}
+      <div className="hero heroPro">
+        <div className="heroPhoto" aria-hidden="true" />
+        <div className="heroBg" aria-hidden="true" />
 
-          <div className="heroActions">
-            <PrimaryButton onClick={() => navigate("/eligibility")}>
-              Check eligibility
-            </PrimaryButton>
-            <SecondaryButton onClick={() => navigate("/how-it-works")}>
-              See how it works
-            </SecondaryButton>
+        <div className="heroInner heroGrid">
+          <div className="heroLeft">
+            <div className="heroKicker">Community solar for Long Island</div>
+
+            <h1 className="heroTitle">
+              Get solar savings without installing panels
+            </h1>
+
+            <p className="heroSubtitle">
+              Enroll in community solar and receive credits on your PSEG Long
+              Island bill. No equipment. No roof work. Cancel anytime.
+            </p>
+
+            <div className="heroActions">
+              <PrimaryButton onClick={() => navigate("/eligibility")}>
+                Check eligibility
+              </PrimaryButton>
+              <SecondaryButton onClick={() => navigate("/how-it-works")}>
+                See how it works
+              </SecondaryButton>
+            </div>
+
+            <div className="trustRow" aria-label="Trust">
+              <Pill icon={<Sun size={16} />}>No equipment</Pill>
+              <Pill icon={<CheckCircle2 size={16} />}>No roof changes</Pill>
+              <Pill icon={<FileCheck size={16} />}>Cancel anytime</Pill>
+              <Pill icon={<Zap size={16} />}>Utility compliant</Pill>
+            </div>
+
+            <div className="proofRow">
+              <div className="proofItem">
+                <div className="proofBig">1–2</div>
+                <div className="proofSmall">billing cycles to see credits</div>
+              </div>
+              <div className="proofItem">
+                <div className="proofBig">10–40%</div>
+                <div className="proofSmall">typical estimated savings range</div>
+              </div>
+              <div className="proofItem">
+                <div className="proofBig">0</div>
+                <div className="proofSmall">equipment installs</div>
+              </div>
+            </div>
+
+            <div className="downloadRow" aria-label="Downloads">
+              <a className="dlLink" href="/SolarShare-Guide.pdf">
+                <Download size={18} />
+                Download guide
+              </a>
+              <a className="dlLink" href="/CommunitySolar-FAQ.pdf">
+                <Download size={18} />
+                Download FAQ
+              </a>
+            </div>
           </div>
 
-          <div className="trustRow" aria-label="Trust">
-            <div className="trustPill">No equipment</div>
-            <div className="trustPill">No roof changes</div>
-            <div className="trustPill">Cancel anytime</div>
-            <div className="trustPill">Utility compliant</div>
-          </div>
+          <div className="heroRight" aria-label="SolarShare preview">
+            <div className="deviceCard">
+              <div className="deviceTop">
+                <div className="dot" />
+                <div className="dot" />
+                <div className="dot" />
+                <div className="deviceTitle">SolarShare Credits Preview</div>
+              </div>
 
-          <div className="downloadRow" aria-label="Downloads">
-            <a className="dlLink" href="/SolarShare-Guide.pdf">
-              <Download size={18} />
-              Download guide
-            </a>
-            <a className="dlLink" href="/CommunitySolar-FAQ.pdf">
-              <Download size={18} />
-              Download FAQ
-            </a>
-          </div>
+              <div className="deviceBody">
+                <div className="billRow">
+                  <div className="billLabel">PSEG Bill</div>
+                  <div className="billValue">$182.40</div>
+                </div>
 
-          <div className="messageBanner">
-            <div className="messageTitle">What stays the same</div>
-            <div className="messageBody">{TRUST_MESSAGE}</div>
+                <div className="billRow">
+                  <div className="billLabel">Solar credits</div>
+                  <div className="billValue billGreen">- $26.10</div>
+                </div>
+
+                <div className="divider" />
+
+                <div className="billRow">
+                  <div className="billLabel">You pay</div>
+                  <div className="billValue billStrong">$156.30</div>
+                </div>
+
+                <div className="miniNote">
+                  You still stay with PSEG. Only the bill changes.
+                </div>
+
+                <div className="miniCTA">
+                  <button
+                    className="miniBtn"
+                    type="button"
+                    onClick={() => navigate("/projects")}
+                  >
+                    View projects
+                  </button>
+                  <button
+                    className="miniBtnOutline"
+                    type="button"
+                    onClick={() => navigate("/credit-explanation")}
+                  >
+                    Learn credits
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="floatingBadge">
+              <Sun size={16} />
+              Built for {BRAND.territory}
+            </div>
           </div>
         </div>
       </div>
 
+      {/* FEATURE STRIP */}
       <Card className="wideCard">
-        <div className="sameBlock">
-          <div className="sameIcon" aria-hidden="true">
-            <CheckCircle2 size={22} />
+        <div className="featureStrip">
+          <div className="featureItem">
+            <span className="featureIcon" aria-hidden="true">
+              <CheckCircle2 size={18} />
+            </span>
+            <div>
+              <div className="featureTitle">Utility stays the same</div>
+              <div className="featureText">PSEG still delivers power and bills you.</div>
+            </div>
           </div>
-          <div>
-            <div className="sameTitle">Here is what stays the same</div>
-            <ul className="sameList">
-              <li>No roof change. Your home stays exactly as it is.</li>
-              <li>No wires change. Your electrical setup does not change.</li>
-              <li>You stay with PSEG. They still deliver your electricity.</li>
-              <li>You receive solar credits on your PSEG bill. That is the only change.</li>
-            </ul>
+
+          <div className="featureItem">
+            <span className="featureIcon" aria-hidden="true">
+              <Sun size={18} />
+            </span>
+            <div>
+              <div className="featureTitle">Credits reduce your bill</div>
+              <div className="featureText">Solar credits appear automatically.</div>
+            </div>
+          </div>
+
+          <div className="featureItem">
+            <span className="featureIcon" aria-hidden="true">
+              <Zap size={18} />
+            </span>
+            <div>
+              <div className="featureTitle">Enroll in minutes</div>
+              <div className="featureText">No equipment, no roof work.</div>
+            </div>
           </div>
         </div>
       </Card>
@@ -529,10 +635,10 @@ function Eligibility() {
           </div>
 
           <div className="eligibilityTrustRow" aria-label="Trust">
-            <div className="trustPill">No equipment</div>
-            <div className="trustPill">No roof changes</div>
-            <div className="trustPill">Cancel anytime</div>
-            <div className="trustPill">Utility compliant</div>
+            <Pill icon={<Sun size={16} />}>No equipment</Pill>
+            <Pill icon={<CheckCircle2 size={16} />}>No roof changes</Pill>
+            <Pill icon={<FileCheck size={16} />}>Cancel anytime</Pill>
+            <Pill icon={<Zap size={16} />}>Utility compliant</Pill>
           </div>
         </div>
       </div>
@@ -669,7 +775,7 @@ function Projects() {
   );
 }
 
-/* FIXED + upgraded ProjectDetail (adds back button + selected banner + uses bill input) */
+/* ProjectDetail */
 function ProjectDetail() {
   const navigate = useNavigate();
   const { projectId } = useParams();
@@ -689,7 +795,6 @@ function ProjectDetail() {
     const subscriberPays = creditValue * project.payPct;
     const savings = Math.max(creditValue - subscriberPays, 0);
 
-    // optional: if user types a bill amount, show % saved
     const billNum = Number(bill);
     const percent =
       Number.isFinite(billNum) && billNum > 0 ? Math.min(savings / billNum, 1) : null;
@@ -736,7 +841,9 @@ function ProjectDetail() {
 
             <div className="detailActions">
               <PrimaryButton
-                onClick={() => navigate("/enrollment", { state: { projectId: project.id } })}
+                onClick={() =>
+                  navigate("/enrollment", { state: { projectId: project.id } })
+                }
               >
                 Enroll in 3 minutes
               </PrimaryButton>
@@ -797,7 +904,9 @@ function ProjectDetail() {
 
               <div className="rowActions">
                 <PrimaryButton
-                  onClick={() => navigate("/enrollment", { state: { projectId: project.id } })}
+                  onClick={() =>
+                    navigate("/enrollment", { state: { projectId: project.id } })
+                  }
                 >
                   Continue to enrollment
                 </PrimaryButton>
@@ -886,7 +995,10 @@ function HowItWorksPage() {
             title="Solar produces and PSEG applies credits"
             text="SolarShare allocates credits and they appear on your PSEG bill."
           />
-          <TimelineItem title="You see savings monthly" text="Credits reduce what you owe each month. Cancel anytime." />
+          <TimelineItem
+            title="You see savings monthly"
+            text="Credits reduce what you owe each month. Cancel anytime."
+          />
         </div>
 
         <div className="rowActions">
