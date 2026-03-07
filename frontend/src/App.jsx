@@ -9,6 +9,13 @@ import {
   useParams,
 } from "react-router-dom";
 import {
+  checkEligibility,
+  enroll,
+  estimate,
+  getEnrollment,
+  getProjects,
+} from "./api";
+import {
   CheckCircle2,
   Download,
   ExternalLink,
@@ -27,9 +34,11 @@ const BRAND = {
 const TRUST_MESSAGE =
   "No roof change. No wires change. You stay with PSEG. You receive solar credits on your PSEG bill.";
 
-const ELIGIBLE_PREFIXES = ["115", "117", "119"]; // simple demo rule
+const NO_SUBSCRIPTION_MESSAGE =
+  "No subscription required. Savings are built into your community solar credit discount. You stay with PSEG Long Island — only your bill changes via credits. Cancel enrollment anytime.";
 
-const PROJECTS = [
+// Demo fallback data (used only if backend projects fail)
+const DEMO_PROJECTS = [
   {
     id: "northport-sun-01",
     name: "Northport Community Solar",
@@ -64,9 +73,32 @@ const PROJECTS = [
     savingsHigh: 30,
     status: "Open",
     description:
-      "Simple enrollment. Cancel anytime. Your utility service stays the same.",
+      "Simple enrollment. Cancel enrollment anytime. Your utility service stays the same.",
   },
 ];
+
+const STORAGE = {
+  zip: "solarshare_zip",
+  territoryId: "solarshare_territory_id",
+  projectId: "solarshare_project_id",
+  enrollmentId: "solarshare_enrollment_id",
+};
+
+function saveStr(key, value) {
+  try {
+    if (value == null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, String(value));
+  } catch {
+    // ignore
+  }
+}
+function readStr(key) {
+  try {
+    return sessionStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
 
 function money(n) {
   const num = Number(n);
@@ -84,12 +116,6 @@ function perKwh(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "$0.000/kWh";
   return `$${num.toFixed(3)}/kWh`;
-}
-
-function isEligibleZip(zip) {
-  const z = String(zip || "").trim();
-  if (z.length < 3) return false;
-  return ELIGIBLE_PREFIXES.includes(z.slice(0, 3));
 }
 
 /* side effect: scroll to top when route changes */
@@ -227,7 +253,7 @@ function Layout({ children }) {
                 isActive ? "navLink navLinkActive" : "navLink"
               }
             >
-              Pricing
+              Cost and savings
             </NavLink>
             <NavLink
               to="/dashboard"
@@ -264,6 +290,11 @@ function SiteFooter() {
         <div className="footerLeft">
           <div className="footerBrand">{BRAND.name}</div>
           <div className="footerMeta">{TRUST_MESSAGE}</div>
+          <div className="footerMeta">{NO_SUBSCRIPTION_MESSAGE}</div>
+          <div className="footerMeta">
+            Prototype simulates enrollment and credit allocation. No real utility
+            integration in demo.
+          </div>
           <div className="footerMeta">© {year} Educational project</div>
         </div>
 
@@ -288,7 +319,6 @@ function Home() {
 
   return (
     <>
-      {/* HERO WITH BACKGROUND IMAGE FROM /public */}
       <div className="hero heroPro">
         <div className="heroPhoto" aria-hidden="true" />
         <div className="heroBg" aria-hidden="true" />
@@ -297,13 +327,12 @@ function Home() {
           <div className="heroLeft">
             <div className="heroKicker">Community solar for Long Island</div>
 
-            <h1 className="heroTitle">
-              Get solar savings without installing panels
-            </h1>
+            <h1 className="heroTitle">Get solar savings without installing panels</h1>
 
             <p className="heroSubtitle">
-              Enroll in community solar and receive credits on your PSEG Long
-              Island bill. No equipment. No roof work. Cancel anytime.
+              Enroll in community solar and receive credits on your PSEG Long Island
+              bill. No equipment. No roof work. Cancel enrollment anytime. No
+              subscription required.
             </p>
 
             <div className="heroActions">
@@ -318,7 +347,7 @@ function Home() {
             <div className="trustRow" aria-label="Trust">
               <Pill icon={<Sun size={16} />}>No equipment</Pill>
               <Pill icon={<CheckCircle2 size={16} />}>No roof changes</Pill>
-              <Pill icon={<FileCheck size={16} />}>Cancel anytime</Pill>
+              <Pill icon={<FileCheck size={16} />}>Cancel enrollment anytime</Pill>
               <Pill icon={<Zap size={16} />}>Utility compliant</Pill>
             </div>
 
@@ -377,7 +406,8 @@ function Home() {
                 </div>
 
                 <div className="miniNote">
-                  You still stay with PSEG. Only the bill changes.
+                  You stay with PSEG Long Island. Only the bill changes via credits.
+                  No subscription required.
                 </div>
 
                 <div className="miniCTA">
@@ -407,7 +437,6 @@ function Home() {
         </div>
       </div>
 
-      {/* FEATURE STRIP */}
       <Card className="wideCard">
         <div className="featureStrip">
           <div className="featureItem">
@@ -435,8 +464,8 @@ function Home() {
               <Zap size={18} />
             </span>
             <div>
-              <div className="featureTitle">Enroll in minutes</div>
-              <div className="featureText">No equipment, no roof work.</div>
+              <div className="featureTitle">No subscription required</div>
+              <div className="featureText">Savings are built into the credit discount.</div>
             </div>
           </div>
         </div>
@@ -475,7 +504,7 @@ function Home() {
 
         <div className="centerRow">
           <SecondaryButton onClick={() => navigate("/credit-explanation")}>
-            View detailed explanation
+            View bill credit breakdown
           </SecondaryButton>
         </div>
       </Section>
@@ -491,10 +520,10 @@ function Home() {
           />
           <MiniFaq q="Do I install equipment?" a="No panels, no wiring, no roof work." />
           <MiniFaq
-            q="How do I receive savings?"
-            a="Solar credits appear on your PSEG bill and reduce what you owe."
+            q="Where do credits show up?"
+            a="On your PSEG bill as a line item credit that reduces what you owe."
           />
-          <MiniFaq q="Can I cancel?" a="Yes, you can cancel anytime." />
+          <MiniFaq q="Can I cancel?" a="Yes. Cancel enrollment anytime." />
         </div>
 
         <div className="centerRow">
@@ -536,7 +565,7 @@ function CallToAction() {
       <div className="ctaInner">
         <div className="ctaTitle">Ready to start saving?</div>
         <div className="ctaText">
-          Check if community solar is available in your area. Takes less than 30 seconds.
+          Verify your territory and see available projects. Takes less than 30 seconds.
         </div>
         <div className="ctaActions">
           <button className="ctaBtn" onClick={() => navigate("/eligibility")}>
@@ -548,7 +577,7 @@ function CallToAction() {
   );
 }
 
-/* Eligibility page */
+/* Eligibility page (backend wired) */
 function Eligibility() {
   const navigate = useNavigate();
 
@@ -556,16 +585,45 @@ function Eligibility() {
   const [whyOpen, setWhyOpen] = useState(false);
   const [error, setError] = useState("");
 
-  function verify() {
+  const [loading, setLoading] = useState(false);
+  const [notEligible, setNotEligible] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistJoined, setWaitlistJoined] = useState(false);
+
+  async function verify() {
     const z = zip.trim();
+
+    setError("");
+    setNotEligible(false);
+    setWaitlistJoined(false);
 
     if (!/^\d{5}$/.test(z)) {
       setError("Please enter a 5 digit ZIP code.");
       return;
     }
 
-    setError("");
-    navigate(`/eligibility/result?zip=${encodeURIComponent(z)}`);
+    setLoading(true);
+    try {
+      const res = await checkEligibility({ zip: z });
+
+      if (res?.eligible) {
+        const territoryId = res.territory_id || "";
+        saveStr(STORAGE.zip, z);
+        saveStr(STORAGE.territoryId, territoryId);
+
+        navigate(
+          `/eligibility/result?zip=${encodeURIComponent(
+            z
+          )}&territory_id=${encodeURIComponent(territoryId)}`
+        );
+      } else {
+        setNotEligible(true);
+      }
+    } catch (e) {
+      setError(e?.message || "Could not verify eligibility.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -574,7 +632,7 @@ function Eligibility() {
         <div className="eligibilityHeroInner">
           <h1 className="eligibilityTitle">Check eligibility in seconds</h1>
           <p className="eligibilitySubtitle">
-            We currently support {BRAND.territory} territory.
+            Verify you are in {BRAND.territory} so credits apply correctly.
           </p>
 
           <div className="eligibilityCard">
@@ -585,59 +643,97 @@ function Eligibility() {
               </div>
             ) : null}
 
-            <div className="zipBlock">
-              <label className="label" htmlFor="zip">
-                ZIP code
-              </label>
-
-              <div className="zipRow">
-                <input
-                  id="zip"
-                  className="input zipInput"
-                  inputMode="numeric"
-                  autoComplete="postal-code"
-                  value={zip}
-                  onChange={(e) => {
-                    const next = e.target.value.replace(/[^\d]/g, "").slice(0, 5);
-                    setZip(next);
-                    if (error) setError("");
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") verify();
-                  }}
-                  placeholder="e.g. 11743"
-                />
-
-                <PrimaryButton onClick={verify} className="zipBtn">
-                  <ExternalLink size={18} style={{ marginRight: 8 }} />
-                  Verify eligibility
-                </PrimaryButton>
-              </div>
-
-              <button
-                className="whyLink"
-                type="button"
-                onClick={() => setWhyOpen((v) => !v)}
-                aria-expanded={whyOpen}
-              >
-                Why do we ask for ZIP?
-              </button>
-
-              {whyOpen ? (
-                <div className="helperBox">
-                  We use your ZIP code only to confirm you are in the {BRAND.territory} service area, so we show options
-                  that apply credits correctly.
+            {notEligible ? (
+              <>
+                <div className="resultRow" style={{ marginBottom: 12 }}>
+                  <div className="resultIconNeutral" aria-hidden="true" />
+                  <div>
+                    <div className="resultTitle">Not supported yet</div>
+                    <div className="resultBody">
+                      Join the waitlist and we will notify you when your area is available.
+                    </div>
+                  </div>
                 </div>
-              ) : null}
 
-              <div className="eligibilityHelper">Core message: {TRUST_MESSAGE}</div>
-            </div>
+                <div className="waitlistRow">
+                  <input
+                    className="input"
+                    value={waitlistEmail}
+                    onChange={(e) => setWaitlistEmail(e.target.value)}
+                    placeholder="Email address"
+                  />
+                  <PrimaryButton
+                    onClick={() => {
+                      if (!waitlistEmail.trim()) return;
+                      setWaitlistJoined(true);
+                    }}
+                  >
+                    Join waitlist
+                  </PrimaryButton>
+                </div>
+
+                {waitlistJoined ? (
+                  <div className="helperBox">You are on the list. Thank you.</div>
+                ) : null}
+
+                <div className="eligibilityHelper">{NO_SUBSCRIPTION_MESSAGE}</div>
+              </>
+            ) : (
+              <div className="zipBlock">
+                <label className="label" htmlFor="zip">
+                  ZIP code
+                </label>
+
+                <div className="zipRow">
+                  <input
+                    id="zip"
+                    className="input zipInput"
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    value={zip}
+                    onChange={(e) => {
+                      const next = e.target.value.replace(/[^\d]/g, "").slice(0, 5);
+                      setZip(next);
+                      if (error) setError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !loading) verify();
+                    }}
+                    placeholder="e.g. 11743"
+                    disabled={loading}
+                  />
+
+                  <PrimaryButton onClick={verify} className="zipBtn" disabled={loading}>
+                    <ExternalLink size={18} style={{ marginRight: 8 }} />
+                    {loading ? "Verifying..." : "Verify PSEG territory"}
+                  </PrimaryButton>
+                </div>
+
+                <button
+                  className="whyLink"
+                  type="button"
+                  onClick={() => setWhyOpen((v) => !v)}
+                  aria-expanded={whyOpen}
+                >
+                  Why do we ask for ZIP?
+                </button>
+
+                {whyOpen ? (
+                  <div className="helperBox">
+                    We use your ZIP code only to confirm you are in the {BRAND.territory} service
+                    area, so we show options that apply credits correctly. No subscription required.
+                  </div>
+                ) : null}
+
+                <div className="eligibilityHelper">{NO_SUBSCRIPTION_MESSAGE}</div>
+              </div>
+            )}
           </div>
 
           <div className="eligibilityTrustRow" aria-label="Trust">
             <Pill icon={<Sun size={16} />}>No equipment</Pill>
             <Pill icon={<CheckCircle2 size={16} />}>No roof changes</Pill>
-            <Pill icon={<FileCheck size={16} />}>Cancel anytime</Pill>
+            <Pill icon={<FileCheck size={16} />}>Cancel enrollment anytime</Pill>
             <Pill icon={<Zap size={16} />}>Utility compliant</Pill>
           </div>
         </div>
@@ -650,8 +746,15 @@ function EligibilityResult() {
   const navigate = useNavigate();
   const loc = useLocation();
   const params = new URLSearchParams(loc.search);
+
   const zip = params.get("zip") || "";
-  const eligible = isEligibleZip(zip);
+  const territoryId = params.get("territory_id") || "";
+  const eligible = Boolean(territoryId);
+
+  useEffect(() => {
+    if (zip) saveStr(STORAGE.zip, zip);
+    if (territoryId) saveStr(STORAGE.territoryId, territoryId);
+  }, [zip, territoryId]);
 
   const [email, setEmail] = useState("");
   const [joined, setJoined] = useState(false);
@@ -664,17 +767,20 @@ function EligibilityResult() {
             <div className="resultRow">
               <div className="resultIconGood" aria-hidden="true" />
               <div>
-                <div className="resultTitle">You are eligible in PSEG Long Island</div>
-                <div className="resultBody">Next, view available community solar projects near you.</div>
+                <div className="resultTitle">Verified territory: {BRAND.territory}</div>
+                <div className="resultBody">
+                  Credits apply correctly in this territory. No subscription required. Next, view
+                  available community solar projects.
+                </div>
               </div>
             </div>
 
             <div className="rowActions">
               <PrimaryButton onClick={() => navigate("/projects")}>
-                View available solar projects
+                View available projects
               </PrimaryButton>
               <SecondaryButton onClick={() => navigate("/credit-explanation")}>
-                How credits work
+                View bill credit breakdown
               </SecondaryButton>
             </div>
           </>
@@ -711,22 +817,97 @@ function EligibilityResult() {
           </>
         )}
 
-        <div className="helperText">{TRUST_MESSAGE}</div>
+        <div className="helperText">{NO_SUBSCRIPTION_MESSAGE}</div>
       </Card>
     </Section>
   );
 }
 
+function normalizeProject(p) {
+  if (!p || typeof p !== "object") return null;
+
+  const id = p.id ?? p.project_id ?? p.slug ?? "";
+  const name = p.name ?? p.project_name ?? "Community Solar Project";
+  const town = p.town ?? p.location ?? p.city ?? "";
+  const creditRate = p.creditRate ?? p.credit_rate ?? p.credit_rate_per_kwh ?? p.rate ?? null;
+  const payPct = p.payPct ?? p.pay_pct ?? p.subscriber_pay_pct ?? null;
+  const savingsLow = p.savingsLow ?? p.savings_low ?? p.savings_min ?? null;
+  const savingsHigh = p.savingsHigh ?? p.savings_high ?? p.savings_max ?? null;
+  const status = p.status ?? p.availability ?? "Open";
+  const description = p.description ?? p.summary ?? "";
+
+  return {
+    id: String(id),
+    name: String(name),
+    town: String(town),
+    creditRate: creditRate == null ? 0 : Number(creditRate),
+    payPct: payPct == null ? 0.9 : Number(payPct),
+    savingsLow: savingsLow == null ? 0 : Number(savingsLow),
+    savingsHigh: savingsHigh == null ? 0 : Number(savingsHigh),
+    status: String(status),
+    description: String(description),
+    raw: p,
+  };
+}
+
 function Projects() {
   const navigate = useNavigate();
+
+  const [projects, setProjects] = useState(DEMO_PROJECTS);
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    const territoryId = readStr(STORAGE.territoryId);
+    if (!territoryId) {
+      setNote("Tip: run eligibility first to load territory-based projects.");
+      setProjects(DEMO_PROJECTS);
+      return;
+    }
+
+    let alive = true;
+    setLoading(true);
+    setNote("");
+
+    getProjects({ territory_id: territoryId })
+      .then((data) => {
+        if (!alive) return;
+
+        const arr = Array.isArray(data) ? data : data?.projects;
+        if (Array.isArray(arr) && arr.length > 0) {
+          const mapped = arr.map(normalizeProject).filter(Boolean);
+          setProjects(mapped.length ? mapped : DEMO_PROJECTS);
+          if (!mapped.length) setNote("Using demo projects (backend returned unknown shape).");
+        } else {
+          setProjects(DEMO_PROJECTS);
+          setNote("Using demo projects (no backend projects found for this territory).");
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        setProjects(DEMO_PROJECTS);
+        setNote("Using demo projects (backend projects request failed).");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <Section
       title="Available community solar projects"
-      subtitle="Choose a project. Enroll digitally. Cancel anytime."
+      subtitle="Choose a project. Enroll digitally. Cancel enrollment anytime. No subscription required."
     >
+      {note ? <div className="helperBox" style={{ marginBottom: 12 }}>{note}</div> : null}
+      {loading ? <div className="helperText">Loading projects...</div> : null}
+
       <div className="projectsGrid">
-        {PROJECTS.map((p) => {
+        {projects.map((p) => {
           const tone = p.status === "Limited" ? "warn" : "good";
           return (
             <Card key={p.id} className="projectCard">
@@ -742,11 +923,11 @@ function Projects() {
 
               <div className="projectStats">
                 <div className="stat">
-                  <div className="statLabel">Estimated bill credit rate</div>
+                  <div className="statLabel">Credit rate</div>
                   <div className="statValue">{perKwh(p.creditRate)} credit</div>
                 </div>
                 <div className="stat">
-                  <div className="statLabel">Discount to subscriber</div>
+                  <div className="statLabel">Subscriber pays</div>
                   <div className="statValue">Pay about {pct(p.payPct)} of credit value</div>
                 </div>
                 <div className="stat">
@@ -762,7 +943,7 @@ function Projects() {
                   View details
                 </SecondaryButton>
                 <PrimaryButton onClick={() => navigate(`/projects/${p.id}?select=1`)}>
-                  Select this project
+                  Choose this project
                 </PrimaryButton>
               </div>
 
@@ -775,19 +956,74 @@ function Projects() {
   );
 }
 
-/* ProjectDetail */
 function ProjectDetail() {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const loc = useLocation();
   const selected = new URLSearchParams(loc.search).get("select") === "1";
 
-  const project = PROJECTS.find((p) => p.id === projectId);
-
+  const [projects, setProjects] = useState(DEMO_PROJECTS);
   const [usage, setUsage] = useState(650);
   const [bill, setBill] = useState("");
+  const [apiEstimate, setApiEstimate] = useState(null);
+  const [estLoading, setEstLoading] = useState(false);
 
-  const estimate = useMemo(() => {
+  useEffect(() => {
+    const territoryId = readStr(STORAGE.territoryId);
+    if (!territoryId) return;
+
+    let alive = true;
+    getProjects({ territory_id: territoryId })
+      .then((data) => {
+        if (!alive) return;
+        const arr = Array.isArray(data) ? data : data?.projects;
+        if (Array.isArray(arr) && arr.length) {
+          const mapped = arr.map(normalizeProject).filter(Boolean);
+          if (mapped.length) setProjects(mapped);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const project = projects.find((p) => String(p.id) === String(projectId));
+
+  useEffect(() => {
+    if (!project) return;
+
+    const zip = readStr(STORAGE.zip);
+    if (!zip) return;
+
+    let alive = true;
+    setEstLoading(true);
+
+    estimate({
+      zip,
+      monthly_usage_kwh: Number(usage) || 0,
+      project_id: project.id,
+    })
+      .then((data) => {
+        if (!alive) return;
+        setApiEstimate(data);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setApiEstimate(null);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setEstLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [project?.id, usage]);
+
+  const localEstimate = useMemo(() => {
     if (!project) return { month: 0, year: 0, percent: null };
 
     const kwh = Number(usage);
@@ -797,10 +1033,20 @@ function ProjectDetail() {
 
     const billNum = Number(bill);
     const percent =
-      Number.isFinite(billNum) && billNum > 0 ? Math.min(savings / billNum, 1) : null;
+      Number.isFinite(billNum) && billNum > 0
+        ? Math.min(savings / billNum, 1)
+        : null;
 
     return { month: savings, year: savings * 12, percent };
   }, [usage, bill, project]);
+
+  const displayMonth =
+    Number(apiEstimate?.monthly_savings ?? apiEstimate?.month ?? apiEstimate?.savings_month) ||
+    localEstimate.month;
+
+  const displayYear =
+    Number(apiEstimate?.yearly_savings ?? apiEstimate?.year ?? apiEstimate?.savings_year) ||
+    localEstimate.year;
 
   if (!project) {
     return (
@@ -836,19 +1082,23 @@ function ProjectDetail() {
             <div className="detailBullets">
               <div className="bullet">You stay with PSEG. They still deliver power.</div>
               <div className="bullet">No panels. No wiring. No roof work.</div>
+              <div className="bullet">
+                No subscription required. Savings are built into the credit discount.
+              </div>
               <div className="bullet">Credits typically show in 1 to 2 billing cycles.</div>
             </div>
 
             <div className="detailActions">
               <PrimaryButton
-                onClick={() =>
-                  navigate("/enrollment", { state: { projectId: project.id } })
-                }
+                onClick={() => {
+                  saveStr(STORAGE.projectId, project.id);
+                  navigate("/enrollment");
+                }}
               >
                 Enroll in 3 minutes
               </PrimaryButton>
               <SecondaryButton onClick={() => navigate("/credit-explanation")}>
-                How credits work
+                View bill credit breakdown
               </SecondaryButton>
             </div>
 
@@ -892,25 +1142,24 @@ function ProjectDetail() {
 
               <div className="calcResult">
                 <div className="calcBig">
-                  Estimated savings: {money(estimate.month)} per month
+                  Estimated savings: {money(displayMonth)} per month
                 </div>
-                <div className="calcSmall">{money(estimate.year)} per year</div>
-                {estimate.percent != null ? (
-                  <div className="calcSmall">
-                    Roughly {Math.round(estimate.percent * 100)}% of your bill
-                  </div>
-                ) : null}
+                <div className="calcSmall">{money(displayYear)} per year</div>
+                {estLoading ? <div className="calcSmall">Updating estimate...</div> : null}
               </div>
 
               <div className="rowActions">
                 <PrimaryButton
-                  onClick={() =>
-                    navigate("/enrollment", { state: { projectId: project.id } })
-                  }
+                  onClick={() => {
+                    saveStr(STORAGE.projectId, project.id);
+                    navigate("/enrollment");
+                  }}
                 >
                   Continue to enrollment
                 </PrimaryButton>
               </div>
+
+              <div className="helperText">{NO_SUBSCRIPTION_MESSAGE}</div>
             </div>
           </div>
         </div>
@@ -943,14 +1192,14 @@ function CreditExplanation() {
           <div className="callout">
             <div className="calloutTitle">You still receive electricity from PSEG</div>
             <div className="calloutBody">
-              Your utility service does not change. Only the bill changes via credits.
+              You do not switch utilities. Only the bill changes via credits.
             </div>
           </div>
 
           <div className="callout">
-            <div className="calloutTitle">Only the bill changes via credits</div>
+            <div className="calloutTitle">No subscription required</div>
             <div className="calloutBody">
-              Credits are applied to your bill and reduce what you owe each month.
+              Savings are built into your community solar credit discount.
             </div>
           </div>
 
@@ -988,8 +1237,8 @@ function HowItWorksPage() {
             text="Pick a project with open spots or limited spots."
           />
           <TimelineItem
-            title="Enroll digitally with no equipment"
-            text="A lightweight form. No roof changes. No wiring."
+            title="Enroll digitally in about 3 minutes"
+            text="A lightweight form. No roof changes. No wiring. No utility switching."
           />
           <TimelineItem
             title="Solar produces and PSEG applies credits"
@@ -997,7 +1246,7 @@ function HowItWorksPage() {
           />
           <TimelineItem
             title="You see savings monthly"
-            text="Credits reduce what you owe each month. Cancel anytime."
+            text="Savings are built into the credit discount. Cancel enrollment anytime."
           />
         </div>
 
@@ -1007,7 +1256,7 @@ function HowItWorksPage() {
           </PrimaryButton>
         </div>
 
-        <div className="helperText">{TRUST_MESSAGE}</div>
+        <div className="helperText">{NO_SUBSCRIPTION_MESSAGE}</div>
       </Card>
     </Section>
   );
@@ -1027,15 +1276,30 @@ function TimelineItem({ title, text }) {
 
 function Enrollment() {
   const navigate = useNavigate();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [ack1, setAck1] = useState(false);
   const [ack2, setAck2] = useState(false);
   const [ack3, setAck3] = useState(false);
-  const [error, setError] = useState("");
 
-  function submit() {
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit() {
+    const zip = readStr(STORAGE.zip);
+    const territory_id = readStr(STORAGE.territoryId);
+    const project_id = readStr(STORAGE.projectId);
+
+    if (!zip || !territory_id) {
+      setError("Please run eligibility first so we know your territory.");
+      return;
+    }
+    if (!project_id) {
+      setError("Please choose a project first.");
+      return;
+    }
     if (!name.trim() || !email.trim() || !address.trim()) {
       setError("Please fill out name, email, and address.");
       return;
@@ -1044,12 +1308,37 @@ function Enrollment() {
       setError("Please check all acknowledgements to continue.");
       return;
     }
+
     setError("");
-    navigate("/dashboard?status=submitted");
+    setLoading(true);
+    try {
+      const res = await enroll({
+        name,
+        email,
+        address,
+        zip,
+        territory_id,
+        project_id,
+      });
+
+      const enrollmentId =
+        res?.enrollment_id || res?.id || res?.enrollmentId || "";
+
+      if (enrollmentId) saveStr(STORAGE.enrollmentId, enrollmentId);
+
+      navigate(`/dashboard?status=submitted${enrollmentId ? `&enrollment_id=${encodeURIComponent(enrollmentId)}` : ""}`);
+    } catch (e) {
+      setError(e?.message || "Enrollment failed.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <Section title="Enrollment" subtitle="Complete enrollment in minutes. No equipment installation.">
+    <Section
+      title="Enrollment"
+      subtitle="Complete enrollment in minutes. No equipment installation. No subscription required."
+    >
       <Card>
         {error ? (
           <div className="errorCard">
@@ -1066,6 +1355,7 @@ function Enrollment() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Full name"
+              disabled={loading}
             />
           </div>
 
@@ -1076,6 +1366,7 @@ function Enrollment() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@email.com"
+              disabled={loading}
             />
           </div>
 
@@ -1086,6 +1377,7 @@ function Enrollment() {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="Street, City, NY"
+              disabled={loading}
             />
           </div>
 
@@ -1101,6 +1393,7 @@ function Enrollment() {
               type="checkbox"
               checked={ack1}
               onChange={(e) => setAck1(e.target.checked)}
+              disabled={loading}
             />
             <span>No roof changes</span>
           </label>
@@ -1109,6 +1402,7 @@ function Enrollment() {
               type="checkbox"
               checked={ack2}
               onChange={(e) => setAck2(e.target.checked)}
+              disabled={loading}
             />
             <span>No utility switching</span>
           </label>
@@ -1117,19 +1411,22 @@ function Enrollment() {
               type="checkbox"
               checked={ack3}
               onChange={(e) => setAck3(e.target.checked)}
+              disabled={loading}
             />
-            <span>Cancel anytime</span>
+            <span>Cancel enrollment anytime</span>
           </label>
         </div>
 
         <div className="rowActions">
-          <PrimaryButton onClick={submit}>Submit enrollment</PrimaryButton>
-          <SecondaryButton onClick={() => navigate("/projects")}>
-            Save and continue later
+          <PrimaryButton onClick={submit} disabled={loading}>
+            {loading ? "Submitting..." : "Complete enrollment"}
+          </PrimaryButton>
+          <SecondaryButton onClick={() => navigate("/projects")} disabled={loading}>
+            Back to projects
           </SecondaryButton>
         </div>
 
-        <div className="helperText">{TRUST_MESSAGE}</div>
+        <div className="helperText">{NO_SUBSCRIPTION_MESSAGE}</div>
       </Card>
     </Section>
   );
@@ -1138,36 +1435,84 @@ function Enrollment() {
 function Dashboard() {
   const loc = useLocation();
   const params = new URLSearchParams(loc.search);
-  const status = params.get("status") || "credits_active";
+
+  const urlEnrollmentId = params.get("enrollment_id") || "";
+  const storedEnrollmentId = readStr(STORAGE.enrollmentId);
+  const enrollmentId = urlEnrollmentId || storedEnrollmentId;
+
+  const [data, setData] = useState(null);
+  const [loadErr, setLoadErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enrollmentId) return;
+
+    let alive = true;
+    setLoading(true);
+    setLoadErr("");
+
+    getEnrollment(enrollmentId)
+      .then((res) => {
+        if (!alive) return;
+        setData(res);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setLoadErr(e?.message || "Could not load enrollment.");
+        setData(null);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [enrollmentId]);
+
+  const status = String(data?.status || params.get("status") || "submitted");
 
   const steps = [
     { key: "submitted", label: "Submitted" },
     { key: "approved", label: "Approved" },
     { key: "credits_active", label: "Credits active" },
   ];
-
   const activeIndex = Math.max(0, steps.findIndex((s) => s.key === status));
+
+  const projectName =
+    data?.project_name || data?.project || "Northport Community Solar";
+
+  const savingsMonth =
+    Number(data?.estimated_monthly_savings ?? data?.monthly_savings) || 28;
 
   return (
     <Section title="Dashboard" subtitle="Your enrollment status and savings at a glance.">
+      {loading ? <div className="helperText">Loading enrollment...</div> : null}
+      {loadErr ? (
+        <div className="helperBox" style={{ marginBottom: 12 }}>
+          {loadErr}
+        </div>
+      ) : null}
+
       <div className="dashGrid">
         <Card>
           <div className="dashTitle">Current project</div>
-          <div className="dashBig">Northport Community Solar</div>
+          <div className="dashBig">{projectName}</div>
           <div className="dashMeta">Utility: {BRAND.territory}</div>
-          <div className="dashMeta">{TRUST_MESSAGE}</div>
+          <div className="dashMeta">{NO_SUBSCRIPTION_MESSAGE}</div>
         </Card>
 
         <Card>
           <div className="dashTitle">Estimated savings this month</div>
-          <div className="dashBig">{money(28)}</div>
+          <div className="dashBig">{money(savingsMonth)}</div>
           <div className="dashMeta">Estimate based on recent usage and credit rate</div>
         </Card>
 
         <Card>
-          <div className="dashTitle">Credits expected next bill date</div>
-          <div className="dashBig">Mar 10</div>
-          <div className="dashMeta">Timing varies. Usually 1 to 2 billing cycles</div>
+          <div className="dashTitle">When credits typically begin</div>
+          <div className="dashBig">1–2 billing cycles</div>
+          <div className="dashMeta">Credits show up as a line item on your PSEG bill</div>
         </Card>
 
         <Card className="dashWide">
@@ -1188,8 +1533,8 @@ function Dashboard() {
           </div>
 
           <div className="rowActions">
-            <SecondaryButton onClick={() => alert("Credit details page can be added next.")}>
-              View credit details
+            <SecondaryButton onClick={() => alert("Bill credit breakdown page can be added next.")}>
+              View bill credit breakdown
             </SecondaryButton>
             <SecondaryButton onClick={() => alert("Manage enrollment page can be added next.")}>
               Manage enrollment
@@ -1199,7 +1544,7 @@ function Dashboard() {
               onClick={() => alert("Cancel flow can be added next.")}
               type="button"
             >
-              Cancel subscription
+              Cancel enrollment
             </button>
           </div>
         </Card>
@@ -1215,9 +1560,10 @@ function FaqPage() {
         <div className="faqList">
           <FaqItem q="Do I switch utilities?" a="No. PSEG still delivers electricity and sends your bill." />
           <FaqItem q="Do I install equipment?" a="No panels, no wiring, no roof work." />
-          <FaqItem q="How do I receive savings?" a="Solar credits appear on your PSEG bill and reduce what you owe." />
-          <FaqItem q="Can I cancel?" a="Yes, you can cancel anytime." />
-          <FaqItem q="When do credits start?" a="Typically 1 to 2 billing cycles." />
+          <FaqItem q="Where do credits show up?" a="On your PSEG bill as a line item credit that reduces what you owe." />
+          <FaqItem q="How long until credits start?" a="Typically 1 to 2 billing cycles." />
+          <FaqItem q="Can I cancel?" a="Yes. Cancel enrollment anytime." />
+          <FaqItem q="Is this peer-to-peer energy selling?" a="No. This is credit allocation through community solar, not direct energy selling." />
         </div>
 
         <div className="supportBox">
@@ -1232,7 +1578,7 @@ function FaqPage() {
           </div>
         </div>
 
-        <div className="helperText">{TRUST_MESSAGE}</div>
+        <div className="helperText">{NO_SUBSCRIPTION_MESSAGE}</div>
       </Card>
     </Section>
   );
@@ -1249,22 +1595,26 @@ function FaqItem({ q, a }) {
 
 function Pricing() {
   return (
-    <Section title="Pricing" subtitle="Community solar enrollment is designed to be simple.">
+    <Section
+      title="Cost and savings"
+      subtitle="No subscription required. Savings are built into your credit discount."
+    >
       <div className="pricingGrid">
         <Card>
-          <div className="priceTitle">Pay as you save</div>
-          <div className="priceBig">No upfront equipment</div>
+          <div className="priceTitle">How savings work</div>
+          <div className="priceBig">Discounted credit value</div>
           <div className="priceText">
-            You pay a discounted portion of the credit value and keep the difference as savings.
+            Your utility issues bill credits based on solar production. You pay a discounted portion
+            of the credit value and keep the difference as savings.
           </div>
-          <div className="priceFoot">{TRUST_MESSAGE}</div>
+          <div className="priceFoot">{NO_SUBSCRIPTION_MESSAGE}</div>
         </Card>
 
         <Card>
-          <div className="priceTitle">Cancel anytime</div>
-          <div className="priceBig">No long term lock in</div>
+          <div className="priceTitle">Cancel enrollment anytime</div>
+          <div className="priceBig">Utility stays the same</div>
           <div className="priceText">
-            If your needs change, you can cancel. Your utility service stays the same.
+            If your needs change, you can cancel enrollment. PSEG still delivers power and bills you.
           </div>
           <div className="priceFoot">{TRUST_MESSAGE}</div>
         </Card>
