@@ -1,0 +1,154 @@
+<!-- SolarShare About page: company narrative, market thesis, and execution readiness. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About | SolarShare</title>
+    <link rel="icon" href="/static/solarshare-logo-icon.svg" type="image/svg+xml" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("solarshare_visual_mode");
+          if (raw && JSON.parse(raw) === "cinematic") {
+            document.documentElement.classList.add("theme-cinematic");
+          }
+        } catch (error) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="content-page">
+    <a href="#about-main" class="skip-link">Skip to content</a>
+    <div class="bg-canvas" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <div class="glow glow-c"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="announcement-bar">
+      <p>Investor-ready workflow: utility-compatible allocation, transparent assumptions, and trackable outcomes.</p>
+      <a href="/methodology">View methodology</a>
+    </div>
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="brand"><img class="brand-logo" src="/static/solarshare-logo-full.svg" alt="SolarShare logo" /></a>
+        <nav class="site-nav">
+          <a href="/" data-route="/">Home</a>
+          <a href="/about" data-route="/about">About</a>
+          <a href="/methodology" data-route="/methodology">Methodology</a>
+          <a href="/pricing" data-route="/pricing">Pricing</a>
+          <a href="/contact" data-route="/contact">Contact</a>
+          <details class="mega-nav">
+            <summary>Solutions</summary>
+            <div class="mega-panel">
+              <article>
+                <h4>For households</h4>
+                <p>Join shared solar savings without rooftop installs or utility switching.</p>
+              </article>
+              <article>
+                <h4>For developers</h4>
+                <p>Accelerate subscriber allocation and reduce unused credit capacity.</p>
+              </article>
+              <article>
+                <h4>For advisors</h4>
+                <p>Use transparent scenarios, assumptions, and export-ready reports.</p>
+              </article>
+            </div>
+          </details>
+          <a href="/#options-panel">Results</a>
+          <a href="/#why-solarshare">Why us</a>
+        </nav>
+        <div class="site-tools">
+          <button data-visual-mode-toggle class="mode-toggle" type="button" aria-pressed="false">Cinematic Mode</button>
+          <a class="nav-cta" href="/#comparison-form">Start Now</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="page page-compact" id="about-main">
+      <section class="panel page-hero page-hero-photo">
+        <p class="eyebrow">About SolarShare</p>
+        <h1>We build the allocation layer between households, developers, and utility credit infrastructure.</h1>
+        <p>
+          Clean generation is scaling. Access remains inefficient. SolarShare focuses on the financial coordination
+          layer that routes existing community-solar value to more households with less friction.
+        </p>
+      </section>
+
+      <section class="panel image-split">
+        <img
+          src="https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?auto=format&fit=crop&w=1300&q=80"
+          alt="Business leaders discussing growth strategy"
+          loading="lazy"
+        />
+        <article>
+          <h2>Operating Thesis</h2>
+          <p>
+            The limiting factor in many CDG markets is no longer generation buildout, but enrollment quality,
+            allocation velocity, and coordination across fragmented processes.
+          </p>
+          <p>
+            SolarShare is designed to standardize those workflows without requiring households to become energy experts.
+          </p>
+        </article>
+      </section>
+
+      <section class="panel info-grid two-up">
+        <article>
+          <h2>What we optimize</h2>
+          <ul class="plain-list">
+            <li>Faster matching between household demand and available credit supply</li>
+            <li>Transparent recommendation logic for trust and conversion</li>
+            <li>Operational clarity for developers and advisors</li>
+            <li>State-by-state expansion with reusable workflow patterns</li>
+          </ul>
+        </article>
+        <article>
+          <h2>Why this model scales</h2>
+          <ul class="plain-list">
+            <li>Asset-light model built on existing market infrastructure</li>
+            <li>Lower marginal cost per additional subscriber flow</li>
+            <li>Defensibility through integration and process standardization</li>
+            <li>Multi-territory replication from a shared platform core</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Execution Roadmap</h2>
+        <div class="how-grid timeline">
+          <article>
+            <h3>Phase 1: Territory launch</h3>
+            <p>Ship a utility-compatible workflow, secure first developer partner, validate initial subscriber base.</p>
+          </article>
+          <article>
+            <h3>Phase 2: Standardize operations</h3>
+            <p>Expand to additional CDG territories and harden adapter + ops tooling for repeatability.</p>
+          </article>
+          <article>
+            <h3>Phase 3: National replication</h3>
+            <p>Scale as a shared clean-energy allocation infrastructure layer across multiple states.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel cta-inline">
+        <h2>See the product in action</h2>
+        <p>Run a live scenario and inspect source-backed market context in the app workflow.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/#comparison-form">Open Live Comparison</a>
+          <a class="btn btn-ghost cta-ghost-dark" href="/contact">Talk to the Team</a>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div>© <span id="current-year"></span> SolarShare</div>
+      </footer>
+    </main>
+
+    <script src="/static/site.js"></script>
+  </body>
+</html>

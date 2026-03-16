@@ -1,0 +1,132 @@
+<!-- SolarShare Contact page: investor/customer inquiries with validated submission flow. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contact | SolarShare</title>
+    <link rel="icon" href="/static/solarshare-logo-icon.svg" type="image/svg+xml" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("solarshare_visual_mode");
+          if (raw && JSON.parse(raw) === "cinematic") {
+            document.documentElement.classList.add("theme-cinematic");
+          }
+        } catch (error) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="content-page">
+    <a href="#contact-main" class="skip-link">Skip to content</a>
+    <div class="bg-canvas" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <div class="glow glow-c"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="announcement-bar">
+      <p>Connect with SolarShare for pilots, partnerships, and investor operations updates.</p>
+      <a href="/methodology">View methodology</a>
+    </div>
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="brand"><img class="brand-logo" src="/static/solarshare-logo-full.svg" alt="SolarShare logo" /></a>
+        <nav class="site-nav">
+          <a href="/" data-route="/">Home</a>
+          <a href="/about" data-route="/about">About</a>
+          <a href="/methodology" data-route="/methodology">Methodology</a>
+          <a href="/pricing" data-route="/pricing">Pricing</a>
+          <a href="/contact" data-route="/contact">Contact</a>
+          <details class="mega-nav">
+            <summary>Solutions</summary>
+            <div class="mega-panel">
+              <article>
+                <h4>For households</h4>
+                <p>Join shared solar savings without rooftop installs or utility switching.</p>
+              </article>
+              <article>
+                <h4>For developers</h4>
+                <p>Accelerate subscriber allocation and reduce unused credit capacity.</p>
+              </article>
+              <article>
+                <h4>For advisors</h4>
+                <p>Use transparent scenarios, assumptions, and export-ready reports.</p>
+              </article>
+            </div>
+          </details>
+          <a href="/#options-panel">Results</a>
+          <a href="/#why-solarshare">Why us</a>
+        </nav>
+        <div class="site-tools">
+          <button data-visual-mode-toggle class="mode-toggle" type="button" aria-pressed="false">Cinematic Mode</button>
+          <a class="nav-cta" href="/#comparison-form">Start Now</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="page page-compact" id="contact-main">
+      <section class="panel page-hero page-hero-photo">
+        <p class="eyebrow">Contact SolarShare</p>
+        <h1>Let’s discuss pilots, partnerships, investor updates, and customer workflows.</h1>
+        <p>Submit your inquiry and the team will follow up with next steps.</p>
+      </section>
+
+      <section class="panel image-split">
+        <img
+          src="https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=1300&q=80"
+          alt="Team collaborating in a bright office"
+          loading="lazy"
+        />
+        <article>
+          <h2>Best channels</h2>
+          <ul class="plain-list">
+            <li>Email: <a href="mailto:hello@solarshare.dev">hello@solarshare.dev</a></li>
+            <li>Partnerships: <a href="mailto:partners@solarshare.dev">partners@solarshare.dev</a></li>
+            <li>Investors: <a href="mailto:invest@solarshare.dev">invest@solarshare.dev</a></li>
+            <li>Hours: Monday-Friday, 9:00 AM-6:00 PM ET</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Send an Inquiry</h2>
+        <form id="contact-form" class="form-grid-contact">
+          <label>
+            Name
+            <input id="contact-name" name="name" required minlength="2" maxlength="120" />
+          </label>
+          <label>
+            Email
+            <input id="contact-email" name="email" type="email" required />
+          </label>
+          <label>
+            Interest
+            <select id="contact-interest" name="interest">
+              <option value="customer_support">Customer Support</option>
+              <option value="methodology_question">Methodology Question</option>
+              <option value="partnership">Partnership</option>
+              <option value="investor_relations">Investor Relations</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>
+            Message
+            <textarea id="contact-message" name="message" required minlength="10" maxlength="1000"></textarea>
+          </label>
+          <button type="submit">Submit Inquiry</button>
+        </form>
+        <p id="contact-status" class="muted"></p>
+      </section>
+
+      <footer class="site-footer">
+        <div>© <span id="current-year"></span> SolarShare</div>
+      </footer>
+    </main>
+
+    <script src="/static/site.js"></script>
+  </body>
+</html>

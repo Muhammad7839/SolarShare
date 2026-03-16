@@ -1,0 +1,18 @@
+# Render Blueprint for deploying the SolarShare FastAPI backend and hosted web app.
+services:
+  - type: web
+    name: solarshare-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    healthCheckPath: /health
+    envVars:
+      - key: SOLAR_SHARE_CORS_ORIGINS
+        value: https://solarshare-web.vercel.app,http://localhost:3000,http://127.0.0.1:3000
+      - key: SOLAR_SHARE_RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: SOLAR_SHARE_RATE_LIMIT_LIVE_COMPARISON_PER_MIN
+        value: "60"
+      - key: SOLAR_SHARE_RATE_LIMIT_CONTACT_PER_MIN
+        value: "20"

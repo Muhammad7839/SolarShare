@@ -1,0 +1,156 @@
+<!-- SolarShare Pricing page: economics framing, value capture, and transparency notes. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pricing | SolarShare</title>
+    <link rel="icon" href="/static/solarshare-logo-icon.svg" type="image/svg+xml" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("solarshare_visual_mode");
+          if (raw && JSON.parse(raw) === "cinematic") {
+            document.documentElement.classList.add("theme-cinematic");
+          }
+        } catch (error) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="content-page">
+    <a href="#pricing-main" class="skip-link">Skip to content</a>
+    <div class="bg-canvas" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <div class="glow glow-c"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="announcement-bar">
+      <p>Allocation-margin economics aligned with household savings and developer utilization outcomes.</p>
+      <a href="/methodology">View methodology</a>
+    </div>
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="brand"><img class="brand-logo" src="/static/solarshare-logo-full.svg" alt="SolarShare logo" /></a>
+        <nav class="site-nav">
+          <a href="/" data-route="/">Home</a>
+          <a href="/about" data-route="/about">About</a>
+          <a href="/methodology" data-route="/methodology">Methodology</a>
+          <a href="/pricing" data-route="/pricing">Pricing</a>
+          <a href="/contact" data-route="/contact">Contact</a>
+          <details class="mega-nav">
+            <summary>Solutions</summary>
+            <div class="mega-panel">
+              <article>
+                <h4>For households</h4>
+                <p>Join shared solar savings without rooftop installs or utility switching.</p>
+              </article>
+              <article>
+                <h4>For developers</h4>
+                <p>Accelerate subscriber allocation and reduce unused credit capacity.</p>
+              </article>
+              <article>
+                <h4>For advisors</h4>
+                <p>Use transparent scenarios, assumptions, and export-ready reports.</p>
+              </article>
+            </div>
+          </details>
+          <a href="/#options-panel">Results</a>
+          <a href="/#why-solarshare">Why us</a>
+        </nav>
+        <div class="site-tools">
+          <button data-visual-mode-toggle class="mode-toggle" type="button" aria-pressed="false">Cinematic Mode</button>
+          <a class="nav-cta" href="/#comparison-form">Start Now</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="page page-compact" id="pricing-main">
+      <section class="panel page-hero page-hero-photo">
+        <p class="eyebrow">Economics</p>
+        <h1>Transparent customer savings with infrastructure-level scalability.</h1>
+        <p>
+          SolarShare uses a margin-on-allocation model aligned to credit distribution outcomes while preserving user
+          savings value.
+        </p>
+      </section>
+
+      <section class="panel image-split">
+        <img
+          src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1300&q=80"
+          alt="Financial dashboard displayed on a modern desk"
+          loading="lazy"
+        />
+        <article>
+          <h2>Customer-side value</h2>
+          <p>
+            Households keep a meaningful share of credit value while avoiding rooftop installation costs and utility
+            switching complexity.
+          </p>
+          <p>
+            Recommendation outputs are estimate-based and should be reviewed against local program terms before
+            enrollment decisions.
+          </p>
+        </article>
+      </section>
+
+      <section class="panel price-grid">
+        <article class="price-card">
+          <h2>Consumer Experience</h2>
+          <p class="price-tag">No fee</p>
+          <ul class="plain-list">
+            <li>Run comparisons and save scenarios</li>
+            <li>Inspect source-backed market context</li>
+            <li>Share recommendation summaries</li>
+          </ul>
+        </article>
+        <article class="price-card featured">
+          <h2>Allocation Engine Value</h2>
+          <p class="price-tag">2-5%</p>
+          <ul class="plain-list">
+            <li>Developer-paid allocation margin</li>
+            <li>Revenue tied to distributed credit volume</li>
+            <li>Asset-light scaling profile</li>
+          </ul>
+        </article>
+        <article class="price-card">
+          <h2>Enterprise Programs</h2>
+          <p class="price-tag">Custom</p>
+          <ul class="plain-list">
+            <li>Territory deployment planning</li>
+            <li>Workflow and reporting customization</li>
+            <li>Operations support and onboarding</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Assumption and Disclosure Notes</h2>
+        <ul class="plain-list">
+          <li>All pricing outputs are estimates, not guaranteed billing outcomes.</li>
+          <li>External data may vary by API availability and update frequency.</li>
+          <li>Fallback-safe mode preserves workflow continuity during live-source outages.</li>
+          <li>Program eligibility and final credit allocation depend on territory rules.</li>
+        </ul>
+      </section>
+
+      <section class="panel cta-inline">
+        <h2>Model your own scenario</h2>
+        <p>Run live comparison and inspect transparent assumptions before commitment.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/#comparison-form">Start Comparison</a>
+          <a class="btn btn-ghost cta-ghost-dark" href="/methodology">Review Methodology</a>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div>© <span id="current-year"></span> SolarShare</div>
+      </footer>
+    </main>
+
+    <script src="/static/site.js"></script>
+  </body>
+</html>

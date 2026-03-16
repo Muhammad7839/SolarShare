@@ -1,0 +1,155 @@
+<!-- SolarShare Methodology page: scoring model, data sources, and reliability posture. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Methodology | SolarShare</title>
+    <link rel="icon" href="/static/solarshare-logo-icon.svg" type="image/svg+xml" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("solarshare_visual_mode");
+          if (raw && JSON.parse(raw) === "cinematic") {
+            document.documentElement.classList.add("theme-cinematic");
+          }
+        } catch (error) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="content-page">
+    <a href="#method-main" class="skip-link">Skip to content</a>
+    <div class="bg-canvas" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <div class="glow glow-c"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="announcement-bar">
+      <p>Transparent ranking model with source-linked context and fallback-safe behavior.</p>
+      <a href="/#market-context-panel">Inspect data inputs</a>
+    </div>
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="brand"><img class="brand-logo" src="/static/solarshare-logo-full.svg" alt="SolarShare logo" /></a>
+        <nav class="site-nav">
+          <a href="/" data-route="/">Home</a>
+          <a href="/about" data-route="/about">About</a>
+          <a href="/methodology" data-route="/methodology">Methodology</a>
+          <a href="/pricing" data-route="/pricing">Pricing</a>
+          <a href="/contact" data-route="/contact">Contact</a>
+          <details class="mega-nav">
+            <summary>Solutions</summary>
+            <div class="mega-panel">
+              <article>
+                <h4>For households</h4>
+                <p>Join shared solar savings without rooftop installs or utility switching.</p>
+              </article>
+              <article>
+                <h4>For developers</h4>
+                <p>Accelerate subscriber allocation and reduce unused credit capacity.</p>
+              </article>
+              <article>
+                <h4>For advisors</h4>
+                <p>Use transparent scenarios, assumptions, and export-ready reports.</p>
+              </article>
+            </div>
+          </details>
+          <a href="/#options-panel">Results</a>
+          <a href="/#why-solarshare">Why us</a>
+        </nav>
+        <div class="site-tools">
+          <button data-visual-mode-toggle class="mode-toggle" type="button" aria-pressed="false">Cinematic Mode</button>
+          <a class="nav-cta" href="/#comparison-form">Start Now</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="page page-compact" id="method-main">
+      <section class="panel page-hero page-hero-photo">
+        <p class="eyebrow">Methodology</p>
+        <h1>Transparent scoring logic with source-linked market context.</h1>
+        <p>
+          SolarShare converts pricing, reliability, and distance signals into ranked options. Priority mode controls
+          sorting behavior while preserving visible tradeoffs.
+        </p>
+      </section>
+
+      <section class="panel image-split">
+        <img
+          src="https://images.unsplash.com/photo-1497440001374-f26997328c1b?auto=format&fit=crop&w=1300&q=80"
+          alt="Engineers reviewing large infrastructure plans"
+          loading="lazy"
+        />
+        <article>
+          <h2>Scoring approach</h2>
+          <p>
+            Effective price is computed from base price, time-of-use adjustment, distance sensitivity, and a reliability
+            bonus. Customer-selected priorities then determine final ranking order.
+          </p>
+          <p>
+            The top recommendation includes an explanation string so users understand why the selected option wins.
+          </p>
+        </article>
+      </section>
+
+      <section class="panel info-grid two-up">
+        <article>
+          <h2>Inputs used</h2>
+          <ul class="plain-list">
+            <li>Location text normalized and geocoded</li>
+            <li>State-level retail utility baseline</li>
+            <li>Shortwave radiation and cloud cover context</li>
+            <li>Provider-specific reliability and distance factors</li>
+          </ul>
+        </article>
+        <article>
+          <h2>Priority modes</h2>
+          <ul class="plain-list">
+            <li><strong>Balanced:</strong> overall tradeoff optimization</li>
+            <li><strong>Lowest Cost:</strong> monthly cost minimization</li>
+            <li><strong>Highest Reliability:</strong> confidence-first ranking</li>
+            <li><strong>Closest Distance:</strong> proximity-first ordering</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Live Data Integrity</h2>
+        <div class="trust-grid">
+          <article>
+            <h3>Geocoding</h3>
+            <p>OpenStreetMap/Nominatim for location-to-coordinate resolution.</p>
+          </article>
+          <article>
+            <h3>Weather context</h3>
+            <p>Open-Meteo irradiance and cloud data used in reliability adjustments.</p>
+          </article>
+          <article>
+            <h3>Utility baseline</h3>
+            <p>U.S. EIA retail electricity rates, with latest period metadata when available.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Resilience and Safety</h2>
+        <ul class="plain-list">
+          <li>If external APIs fail, fallback-safe values are used and clearly labeled in the UI.</li>
+          <li>Response payload includes source URLs and observation timestamps.</li>
+          <li>Contact inquiries are validated server-side and rate-limited.</li>
+          <li>Request IDs are attached to responses for traceability and support triage.</li>
+        </ul>
+      </section>
+
+      <footer class="site-footer">
+        <div>© <span id="current-year"></span> SolarShare</div>
+      </footer>
+    </main>
+
+    <script src="/static/site.js"></script>
+  </body>
+</html>

@@ -1,0 +1,145 @@
+<!-- SolarShare Admin page: lightweight funnel and drop-off analytics for operations. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Analytics | SolarShare</title>
+    <link rel="icon" href="/static/solarshare-logo-icon.svg" type="image/svg+xml" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("solarshare_visual_mode");
+          if (raw && JSON.parse(raw) === "cinematic") {
+            document.documentElement.classList.add("theme-cinematic");
+          }
+        } catch (error) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="content-page">
+    <div class="bg-canvas" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <div class="glow glow-c"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="announcement-bar">
+      <p>Operations analytics for conversion funnel and lead intake.</p>
+      <a href="/">Back to app</a>
+    </div>
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="brand"><img class="brand-logo" src="/static/solarshare-logo-full.svg" alt="SolarShare logo" /></a>
+        <nav class="site-nav">
+          <a href="/" data-route="/">Home</a>
+          <a href="/about" data-route="/about">About</a>
+          <a href="/methodology" data-route="/methodology">Methodology</a>
+          <a href="/pricing" data-route="/pricing">Pricing</a>
+          <a href="/contact" data-route="/contact">Contact</a>
+          <a href="/admin" data-route="/admin">Admin</a>
+        </nav>
+        <div class="site-tools">
+          <button data-visual-mode-toggle class="mode-toggle" type="button" aria-pressed="false">Cinematic Mode</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="page page-compact">
+      <section class="panel">
+        <h2>Analytics Summary</h2>
+        <div id="admin-totals" class="insights-grid"></div>
+      </section>
+      <section class="panel">
+        <h2>Event Counts</h2>
+        <div id="admin-events" class="insights-grid"></div>
+      </section>
+      <section class="panel">
+        <h2>Funnel Drop-off</h2>
+        <div id="admin-dropoff" class="insights-grid"></div>
+      </section>
+      <section class="panel">
+        <h2>Recent Events</h2>
+        <div id="admin-recent" class="history-list"></div>
+      </section>
+      <footer class="site-footer">
+        <div>© <span id="current-year"></span> SolarShare</div>
+      </footer>
+    </main>
+
+    <script src="/static/site.js"></script>
+    <script>
+      (function () {
+        function escapeHtml(value) {
+          var text = String(value == null ? "" : value);
+          return text
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+        }
+
+        function card(label, value) {
+          return (
+            '<article class="insight-card"><h3>' +
+            escapeHtml(label) +
+            "</h3><p>" +
+            escapeHtml(value) +
+            "</p></article>"
+          );
+        }
+        async function loadAnalytics() {
+          const response = await fetch("/admin/analytics");
+          const payload = await response.json();
+          const totals = payload.totals || {};
+          const byEvent = payload.by_event || {};
+          const dropoff = payload.dropoff || {};
+          const recent = payload.recent_events || [];
+
+          document.getElementById("admin-totals").innerHTML =
+            card("Total Events", totals.events || 0) + card("Total Leads", totals.leads || 0);
+
+          document.getElementById("admin-events").innerHTML = Object.keys(byEvent)
+            .sort()
+            .map(function (name) {
+              return card(name, byEvent[name]);
+            })
+            .join("");
+
+          document.getElementById("admin-dropoff").innerHTML = Object.keys(dropoff)
+            .sort()
+            .map(function (name) {
+              return card(name, dropoff[name]);
+            })
+            .join("");
+
+          document.getElementById("admin-recent").innerHTML = recent
+            .map(function (item) {
+              return (
+                '<article class="insight-card history-item">' +
+                "<h3>" +
+                escapeHtml(item.event_name) +
+                "</h3>" +
+                "<p>" +
+                escapeHtml(item.page || "n/a") +
+                "</p>" +
+                "<p>" +
+                escapeHtml(item.created_at) +
+                "</p>" +
+                "</article>"
+              );
+            })
+            .join("");
+        }
+        loadAnalytics().catch(function () {
+          document.getElementById("admin-totals").innerHTML =
+            '<article class="insight-card"><h3>Status</h3><p>Unable to load analytics.</p></article>';
+        });
+      })();
+    </script>
+  </body>
+</html>

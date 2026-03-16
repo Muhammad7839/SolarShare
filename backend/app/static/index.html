@@ -1,0 +1,466 @@
+<!-- SolarShare web UI: premium investor-grade website + functional customer clean-energy app. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SolarShare | Utility-Integrated Community Solar Access</title>
+    <meta
+      name="description"
+      content="SolarShare helps households access community solar credits through existing utility infrastructure with transparent savings and live market context."
+    />
+    <link rel="icon" href="/static/solarshare-logo-icon.svg" type="image/svg+xml" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("solarshare_visual_mode");
+          if (raw && JSON.parse(raw) === "cinematic") {
+            document.documentElement.classList.add("theme-cinematic");
+          }
+        } catch (error) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <a href="#comparison-form" class="skip-link">Skip to comparison</a>
+
+    <div class="bg-canvas" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <div class="glow glow-c"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="announcement-bar">
+      <p>
+        Launch focus: first CDG territory workflow and utility-compatible allocation operations.
+      </p>
+      <a href="/methodology">View methodology</a>
+    </div>
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="brand">
+          <img class="brand-logo" src="/static/solarshare-logo-full.svg" alt="SolarShare logo" />
+        </a>
+        <nav class="site-nav">
+          <a href="/" data-route="/">Home</a>
+          <a href="/about" data-route="/about">About</a>
+          <a href="/methodology" data-route="/methodology">Methodology</a>
+          <a href="/pricing" data-route="/pricing">Pricing</a>
+          <a href="/contact" data-route="/contact">Contact</a>
+          <details class="mega-nav">
+            <summary>Solutions</summary>
+            <div class="mega-panel">
+              <article>
+                <h4>For households</h4>
+                <p>Join shared solar savings without rooftop installs or utility switching.</p>
+              </article>
+              <article>
+                <h4>For developers</h4>
+                <p>Accelerate subscriber allocation and reduce unused credit capacity.</p>
+              </article>
+              <article>
+                <h4>For advisors</h4>
+                <p>Use transparent scenarios, assumptions, and export-ready reports.</p>
+              </article>
+            </div>
+          </details>
+          <a href="#options-panel">Results</a>
+          <a href="#why-solarshare">Why us</a>
+        </nav>
+        <div class="site-tools">
+          <button id="visual-mode-toggle" data-visual-mode-toggle class="mode-toggle" type="button" aria-pressed="false">
+            Cinematic Mode
+          </button>
+          <span id="live-status-pill" class="status-pill">Data mode: waiting</span>
+          <a class="nav-cta" href="#comparison-form">Start Now</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <header class="hero" id="comparison-form">
+        <div class="hero-copy">
+          <p class="eyebrow">Clean Energy Access</p>
+          <h1>Find your best community solar match in minutes.</h1>
+          <p>
+            Compare local options with transparent pricing, reliability, and distance using your address or ZIP code.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#recommendation-form">Run Live Comparison</a>
+            <a class="btn btn-ghost" href="#market-context-panel">Inspect Data Inputs</a>
+          </div>
+          <div class="hero-proof-tags">
+            <span>Utility-compatible</span>
+            <span>Household savings model</span>
+          </div>
+        </div>
+        <figure class="hero-media">
+          <img
+            src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1400&q=80"
+            alt="Aerial view of utility-scale solar installation"
+            loading="eager"
+          />
+          <figcaption>
+            <strong>Live context:</strong> geocoding + irradiance + utility-rate baseline
+          </figcaption>
+        </figure>
+      </header>
+
+      <section class="photo-ribbon">
+        <article class="photo-card">
+          <img
+            src="https://images.unsplash.com/photo-1497440001374-f26997328c1b?auto=format&fit=crop&w=1000&q=80"
+            alt="Residential neighborhood during sunset"
+            loading="lazy"
+          />
+          <div>
+            <h3>Household access</h3>
+            <p>Clean energy participation for renters and non-rooftop households.</p>
+          </div>
+        </article>
+        <article class="photo-card">
+          <img
+            src="https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=1000&q=80"
+            alt="Rows of solar panels at utility scale"
+            loading="lazy"
+          />
+          <div>
+            <h3>Stranded capacity unlock</h3>
+            <p>Improve allocation efficiency for already-built community solar assets.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel visual-lab-panel" id="visual-lab">
+        <h2>Solar Motion Lab</h2>
+        <p class="muted">A visual framework for pricing, reliability, and distance signals in one model.</p>
+        <div class="visual-lab-grid">
+          <div class="orbital-canvas" aria-hidden="true">
+            <div class="energy-core">
+              <span class="core-label">SolarShare</span>
+            </div>
+            <div class="orbit orbit-1"><span></span></div>
+            <div class="orbit orbit-2"><span></span></div>
+            <div class="orbit orbit-3"><span></span></div>
+          </div>
+          <div class="lab-cards">
+            <article class="lab-card">
+              <h3>Pricing pulse</h3>
+              <p>Utility baselines and program modifiers flow into monthly cost estimates.</p>
+            </article>
+            <article class="lab-card">
+              <h3>Reliability layer</h3>
+              <p>Weather context and site reliability influence confidence scoring.</p>
+            </article>
+            <article class="lab-card">
+              <h3>Distance friction</h3>
+              <p>Location-aware distance factors are included transparently in ranking.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel form-panel">
+        <h2>Run Your Live Comparison</h2>
+        <div class="comparison-stepper" id="comparison-stepper" aria-label="Comparison workflow steps">
+          <article class="step-chip active" data-step-chip="1">1. Location</article>
+          <article class="step-chip" data-step-chip="2">2. Usage & Priority</article>
+          <article class="step-chip" data-step-chip="3">3. Review & Run</article>
+        </div>
+        <form id="recommendation-form">
+          <div class="step-panels">
+            <section class="step-panel active" data-step-panel="1">
+              <div class="grid two-col">
+                <label>
+                  Location
+                  <input id="location" name="location" type="text" placeholder="Long Island, NY" />
+                  <span class="field-help">City + state, neighborhood, or service area</span>
+                </label>
+                <label>
+                  ZIP Code
+                  <input
+                    id="zip-code"
+                    name="zip_code"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="10"
+                    pattern="\\d{5}(-\\d{4})?"
+                    placeholder="11757"
+                  />
+                  <span class="field-help">Optional, but improves geocoding precision</span>
+                </label>
+              </div>
+              <div class="inline-actions">
+                <button id="preview-location-btn" type="button">Preview Location</button>
+              </div>
+              <article id="location-preview-card" class="insight-card hidden">
+                <h3>Location Preview</h3>
+                <p id="location-preview-text" class="muted">Enter location or ZIP to preview resolved details.</p>
+              </article>
+              <div class="step-actions">
+                <button type="button" class="step-next" data-next-step="2">Continue</button>
+              </div>
+            </section>
+
+            <section class="step-panel" data-step-panel="2">
+              <div class="grid two-col">
+                <label>
+                  Monthly Usage (kWh)
+                  <input
+                    id="monthly-usage-kwh"
+                    name="monthly_usage_kwh"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="650"
+                    required
+                  />
+                  <span class="field-help">Use your utility bill monthly average</span>
+                </label>
+                <label>
+                  Priority
+                  <select id="priority" name="priority">
+                    <option value="balanced">Balanced</option>
+                    <option value="lowest_cost">Lowest Cost</option>
+                    <option value="highest_reliability">Highest Reliability</option>
+                    <option value="closest_distance">Closest Distance</option>
+                  </select>
+                  <span class="field-help">Choose what matters most for ranking</span>
+                </label>
+              </div>
+              <div class="step-actions">
+                <button type="button" class="step-back" data-prev-step="1">Back</button>
+                <button type="button" class="step-next" data-next-step="3">Continue</button>
+              </div>
+            </section>
+
+            <section class="step-panel" data-step-panel="3">
+              <article class="insight-card">
+                <h3>Review Inputs</h3>
+                <p id="review-summary" class="muted">Complete previous steps to review your inputs.</p>
+              </article>
+              <div class="step-actions">
+                <button type="button" class="step-back" data-prev-step="2">Back</button>
+                <button id="submit-button" type="submit">Run Live Comparison</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="preset-row">
+            <div class="preset-group">
+              <span>Popular locations</span>
+              <button type="button" class="preset-btn" data-location="Long Island">Long Island</button>
+              <button type="button" class="preset-btn" data-location="New York City">New York City</button>
+              <button type="button" class="preset-btn" data-location="Boston">Boston</button>
+            </div>
+            <div class="preset-group">
+              <span>Usage presets</span>
+              <button type="button" class="preset-btn" data-usage="450">450 kWh</button>
+              <button type="button" class="preset-btn" data-usage="650">650 kWh</button>
+              <button type="button" class="preset-btn" data-usage="900">900 kWh</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel filter-panel hidden" id="filter-panel">
+        <h2>Refine Your Results</h2>
+        <div class="filter-grid">
+          <label>
+            Max Distance (miles): <strong id="max-distance-value">50</strong>
+            <input id="max-distance" type="range" min="5" max="50" step="1" value="50" />
+          </label>
+          <label>
+            Min Reliability: <strong id="min-reliability-value">0%</strong>
+            <input id="min-reliability" type="range" min="0" max="100" step="5" value="0" />
+          </label>
+          <label>
+            Sort By
+            <select id="sort-options">
+              <option value="recommended">Recommended ranking</option>
+              <option value="monthly_cost">Monthly cost (low to high)</option>
+              <option value="savings">Savings (high to low)</option>
+              <option value="distance">Distance (near to far)</option>
+              <option value="reliability">Reliability (high to low)</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section id="error-banner" class="error hidden" role="alert"></section>
+      <section id="loading-state" class="panel hidden">Running comparison...</section>
+
+      <section id="insights-panel" class="panel hidden">
+        <h2>Your Snapshot</h2>
+        <div id="insights-content" class="insights-grid"></div>
+      </section>
+
+      <section id="market-context-panel" class="panel hidden">
+        <h2>Live Market Context</h2>
+        <div id="market-context-content" class="market-grid"></div>
+      </section>
+
+      <section id="recommendation-panel" class="panel hidden">
+        <h2>Top Recommendation</h2>
+        <div id="recommendation-content"></div>
+        <div class="result-actions">
+          <button id="save-scenario-btn" type="button">Save Scenario</button>
+          <button id="download-report-btn" type="button">Download Report</button>
+          <button id="share-summary-btn" type="button">Copy Share Summary</button>
+        </div>
+      </section>
+
+      <section id="options-panel" class="panel hidden">
+        <h2>Ranked Options</h2>
+        <p id="no-results" class="hidden muted">No options match your filters. Broaden filters to see results.</p>
+        <div id="options-list" class="options-list"></div>
+      </section>
+
+      <section id="compare-panel" class="panel hidden">
+        <h2>Comparison Lab</h2>
+        <p class="muted">Pick up to 3 options from the ranking cards to compare side by side.</p>
+        <div id="compare-content" class="compare-grid"></div>
+      </section>
+
+      <section id="planner-panel" class="panel hidden">
+        <h2>Savings Planner</h2>
+        <div class="planner-controls">
+          <label>
+            Projection Years: <strong id="planner-years-value">5</strong>
+            <input id="planner-years" type="range" min="1" max="20" step="1" value="5" />
+          </label>
+          <label>
+            Utility Inflation: <strong id="planner-inflation-value">3%</strong>
+            <input id="planner-inflation" type="range" min="0" max="8" step="0.5" value="3" />
+          </label>
+        </div>
+        <div id="planner-insights" class="insights-grid"></div>
+        <div id="planner-chart" class="planner-chart"></div>
+      </section>
+
+      <section id="history-panel" class="panel">
+        <h2>Saved Scenarios</h2>
+        <p class="muted">Track and replay your latest customer evaluations.</p>
+        <div id="history-list" class="history-list"></div>
+      </section>
+
+      <section class="panel investor-signal-panel" id="why-solarshare">
+        <h2>Why SolarShare Wins</h2>
+        <div class="trust-grid">
+          <article>
+            <h3>Access-first market positioning</h3>
+            <p>Community solar exists, but allocation and enrollment coordination remain fragmented.</p>
+          </article>
+          <article>
+            <h3>Infrastructure-compatible approach</h3>
+            <p>SolarShare integrates with existing utility billing mechanics instead of replacing them.</p>
+          </article>
+          <article>
+            <h3>Scalable margin model</h3>
+            <p>Revenue scales with allocated credit volume and subscriber growth, not owned generation assets.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="how-it-works">
+        <h2>How It Works</h2>
+        <div class="how-grid timeline">
+          <article>
+            <h3>1. Eligibility and location intake</h3>
+            <p>Capture customer location and usage profile in under a minute.</p>
+          </article>
+          <article>
+            <h3>2. Live-context allocation comparison</h3>
+            <p>Rank options with price, reliability, and distance visibility.</p>
+          </article>
+          <article>
+            <h3>3. Enroll and monitor outcomes</h3>
+            <p>Save scenarios, export reports, and continue through enrollment operations.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Frequently Asked Questions</h2>
+        <div class="faq-list">
+          <details>
+            <summary>Do customers need rooftop installation?</summary>
+            <p>No. SolarShare is built around shared/community solar participation through utility-linked credits.</p>
+          </details>
+          <details>
+            <summary>Is the recommendation model transparent?</summary>
+            <p>Yes. Inputs, ranking priorities, and data-source status are displayed directly in the workflow.</p>
+          </details>
+          <details>
+            <summary>What if live sources are unavailable?</summary>
+            <p>The app switches to fallback-safe mode and labels the context so users still receive valid outputs.</p>
+          </details>
+        </div>
+      </section>
+
+      <section class="panel testimonials-panel">
+        <h2>Customer and Advisor Feedback</h2>
+        <div class="testimonial-frame">
+          <button id="testimonial-prev" type="button" aria-label="Previous testimonial">Prev</button>
+          <article id="testimonial-card" class="testimonial-card"></article>
+          <button id="testimonial-next" type="button" aria-label="Next testimonial">Next</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Request a Product Demo</h2>
+        <form id="demo-request-form" class="form-grid-contact">
+          <label>
+            Name
+            <input id="demo-name" name="name" minlength="2" maxlength="120" required />
+          </label>
+          <label>
+            Email
+            <input id="demo-email" name="email" type="email" required />
+          </label>
+          <label>
+            Organization
+            <input id="demo-organization" name="organization" maxlength="160" placeholder="Optional" />
+          </label>
+          <label>
+            Message
+            <textarea id="demo-message" name="message" minlength="10" maxlength="1000" required></textarea>
+          </label>
+          <button type="submit">Submit Demo Request</button>
+        </form>
+        <p id="demo-status" class="muted"></p>
+      </section>
+
+      <section class="panel cta-band">
+        <h2>Build confidence before enrollment</h2>
+        <p>Run your scenario, compare options, and share an export-ready recommendation summary.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#comparison-form">Run Comparison</a>
+          <a class="btn btn-ghost cta-ghost-dark" href="/contact">Book a Demo</a>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div>
+          <strong>SolarShare</strong> - community solar access through utility-integrated credit allocation.
+        </div>
+        <div>
+          Live sources include Open-Meteo, OpenStreetMap/Nominatim, and U.S. EIA, with labeled fallback behavior.
+        </div>
+        <div>© <span id="current-year"></span> SolarShare</div>
+      </footer>
+    </main>
+
+    <aside class="quick-actions" aria-label="Quick actions">
+      <a href="#comparison-form">Compare</a>
+      <a href="#planner-panel">Plan</a>
+      <a href="#history-panel">History</a>
+      <a href="#why-solarshare">Why</a>
+    </aside>
+    <script src="/static/site.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,346 @@
+// Interactive product module that runs live comparisons against the FastAPI backend.
+"use client";
+
+import { useMemo, useState } from "react";
+import { fetchLiveComparison, resolveLocation } from "@/lib/api";
+import { LiveComparisonResponse, LocationResolveResponse, PriorityMode } from "@/lib/types";
+
+const priorities: Array<{ value: PriorityMode; label: string }> = [
+  { value: "balanced", label: "Balanced" },
+  { value: "lowest_cost", label: "Lowest Cost" },
+  { value: "highest_reliability", label: "Highest Reliability" },
+  { value: "closest_distance", label: "Closest Distance" }
+];
+
+export function ComparisonTool() {
+  const [step, setStep] = useState(1);
+  const [location, setLocation] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [usage, setUsage] = useState(650);
+  const [priority, setPriority] = useState<PriorityMode>("balanced");
+  const [loading, setLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [locationPreview, setLocationPreview] = useState<LocationResolveResponse | null>(null);
+  const [result, setResult] = useState<LiveComparisonResponse | null>(null);
+
+  const recommendation = result?.recommendation.recommended_option;
+  const chartData = useMemo(() => {
+    if (!result) {
+      return [];
+    }
+    return result.options.slice(0, 4).map((item) => ({
+      name: item.option.provider_name,
+      savings: Math.max(item.savings_vs_baseline, 0)
+    }));
+  }, [result]);
+
+  function validateStep(stepNumber: number): boolean {
+    const safeLocation = location.trim();
+    const safeZip = zipCode.trim();
+
+    if (stepNumber === 1) {
+      if (!safeLocation && !safeZip) {
+        setError("Enter a city/state location or ZIP code.");
+        return false;
+      }
+      if (safeZip && !/^\d{5}(?:-\d{4})?$/.test(safeZip)) {
+        setError("ZIP code must be 5 digits or ZIP+4 format.");
+        return false;
+      }
+    }
+
+    if (stepNumber === 2) {
+      if (!Number.isFinite(usage) || usage <= 0) {
+        setError("Monthly usage must be a number greater than 0.");
+        return false;
+      }
+    }
+
+    setError(null);
+    return true;
+  }
+
+  async function previewResolvedLocation() {
+    if (!validateStep(1)) {
+      return;
+    }
+    setPreviewLoading(true);
+    setError(null);
+    try {
+      const preview = await resolveLocation({
+        location: location.trim(),
+        zip_code: zipCode.trim() || null
+      });
+      setLocationPreview(preview);
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : "Unable to resolve location.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!validateStep(1) || !validateStep(2)) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const payload = await fetchLiveComparison({
+        location: location.trim(),
+        zip_code: zipCode.trim() || null,
+        monthly_usage_kwh: usage,
+        priority
+      });
+      setResult(payload);
+      setStep(3);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card" id="comparison-tool">
+      <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-solarBlue-100 bg-solarBlue-50/60 p-5">
+          <h3 className="text-xl font-semibold text-solarBlue-900">Start Comparison</h3>
+          <div className="comparison-stepper">
+            <span className={step === 1 ? "active" : step > 1 ? "done" : ""}>1. Location</span>
+            <span className={step === 2 ? "active" : step > 2 ? "done" : ""}>2. Usage</span>
+            <span className={step === 3 ? "active" : ""}>3. Review</span>
+          </div>
+
+          {step === 1 ? (
+            <>
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+                Location (city, state)
+                <input
+                  value={location}
+                  onChange={(event) => setLocation(event.target.value)}
+                  placeholder="Example: New York, NY"
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+                ZIP Code
+                <input
+                  value={zipCode}
+                  onChange={(event) => setZipCode(event.target.value)}
+                  placeholder="11757"
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void previewResolvedLocation();
+                }}
+                disabled={previewLoading}
+                className="w-full rounded-xl border border-solarBlue-200 bg-white px-4 py-3 text-sm font-semibold text-solarBlue-700 transition hover:bg-solarBlue-50 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {previewLoading ? "Resolving Location..." : "Preview Location"}
+              </button>
+
+              {locationPreview ? (
+                <article className="rounded-xl border border-energyGreen-200 bg-energyGreen-100/70 p-3 text-sm text-solarBlue-900">
+                  <p className="font-semibold">Resolved: {locationPreview.resolved_location}</p>
+                  <p className="mt-1">
+                    {locationPreview.city || "City n/a"}, {locationPreview.county || "County n/a"}, {locationPreview.state_code || "State n/a"}{" "}
+                    {locationPreview.postal_code || ""}
+                  </p>
+                  <p className="mt-1">
+                    Confidence: {Math.round((locationPreview.confidence || 0) * 100)}% | Mode:{" "}
+                    {locationPreview.using_fallback ? "Fallback" : "Live"}
+                  </p>
+                </article>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (validateStep(1)) {
+                    setStep(2);
+                  }
+                }}
+                className="w-full rounded-xl bg-solarBlue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-solarBlue-900"
+              >
+                Continue
+              </button>
+            </>
+          ) : null}
+
+          {step === 2 ? (
+            <>
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+                Monthly Usage (kWh)
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={usage}
+                  onChange={(event) => setUsage(Number(event.target.value))}
+                  required
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+                Priority
+                <select
+                  value={priority}
+                  onChange={(event) => setPriority(event.target.value as PriorityMode)}
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                >
+                  {priorities.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="rounded-xl border border-solarBlue-200 bg-white px-4 py-3 text-sm font-semibold text-solarBlue-700 transition hover:bg-solarBlue-50"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (validateStep(2)) {
+                      setStep(3);
+                    }
+                  }}
+                  className="rounded-xl bg-solarBlue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-solarBlue-900"
+                >
+                  Review
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {step === 3 ? (
+            <>
+              <article className="rounded-xl border border-solarBlue-100 bg-white p-3 text-sm text-solarBlue-900/75">
+                <p>
+                  Location: <strong>{location.trim() || "Not provided"}</strong>
+                </p>
+                <p>
+                  ZIP: <strong>{zipCode.trim() || "Not provided"}</strong>
+                </p>
+                <p>
+                  Usage: <strong>{usage} kWh</strong>
+                </p>
+                <p>
+                  Priority: <strong>{priorities.find((item) => item.value === priority)?.label || priority}</strong>
+                </p>
+              </article>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="rounded-xl border border-solarBlue-200 bg-white px-4 py-3 text-sm font-semibold text-solarBlue-700 transition hover:bg-solarBlue-50"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-xl bg-solarBlue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-solarBlue-900 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {loading ? "Running Live Comparison..." : "Run Live Comparison"}
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">{error}</p> : null}
+        </form>
+
+        <div className="space-y-4">
+          <article className="rounded-2xl border border-solarBlue-100 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Top Recommendation</p>
+            <h4 className="mt-2 text-xl font-semibold text-solarBlue-900">
+              {recommendation ? recommendation.option.provider_name : "Run a scenario to see your best fit"}
+            </h4>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75">
+              <p>
+                Monthly Cost: <strong className="metric-value">{recommendation ? `$${recommendation.monthly_cost.toFixed(2)}` : "-"}</strong>
+              </p>
+              <p>
+                Savings vs Baseline:{" "}
+                <strong className="metric-value metric-accent-green">
+                  {recommendation ? `$${recommendation.savings_vs_baseline.toFixed(2)}` : "-"}
+                </strong>
+              </p>
+              <p>
+                Reliability:{" "}
+                <strong className="metric-value">{recommendation ? `${Math.round(recommendation.option.reliability_score * 100)}%` : "-"}</strong>
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Savings by Option</p>
+            <div className="mt-4 space-y-3">
+              {chartData.length ? (
+                chartData.map((row) => (
+                  <div key={row.name} className="grid grid-cols-[120px_1fr_auto] items-center gap-3">
+                    <span className="truncate text-xs font-semibold text-solarBlue-900/70">{row.name}</span>
+                    <div className="h-2 rounded-full bg-solarBlue-50">
+                      <div
+                        className="h-2 rounded-full bg-gradient-to-r from-solarBlue-500 to-energyGreen-500"
+                        style={{ width: `${Math.min((row.savings / 120) * 100, 100)}%` }}
+                      />
+                    </div>
+                    <span className="metric-value metric-accent-green text-xs font-bold text-solarBlue-900">${row.savings.toFixed(0)}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-solarBlue-900/60">No chart yet. Run the tool to populate.</p>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Live Data Context</p>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75">
+              <p>Location: {result?.market_context.resolved_location || "-"}</p>
+              <p>
+                Region: {result?.market_context.city || "-"}, {result?.market_context.county || "-"}, {result?.market_context.state_code || "-"}{" "}
+                {result?.market_context.postal_code || ""}
+              </p>
+              <p>Utility baseline: {result ? `$${result.market_context.utility_price_per_kwh.toFixed(3)}/kWh` : "-"}</p>
+              <p>Resolution confidence: {result ? `${Math.round((result.resolution_confidence || 0) * 100)}%` : "-"}</p>
+              <p>Fallback reason: {result?.fallback_reason || "None"}</p>
+              <p>Observed: {result?.market_context.observed_at_utc || "-"}</p>
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Why this recommendation</p>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75">
+              <p>Price contribution: {result ? `${Math.round((result.factor_breakdown?.price || 0) * 100)}%` : "-"}</p>
+              <p>
+                Reliability contribution: {result ? `${Math.round((result.factor_breakdown?.reliability || 0) * 100)}%` : "-"}
+              </p>
+              <p>Distance contribution: {result ? `${Math.round((result.factor_breakdown?.distance || 0) * 100)}%` : "-"}</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  );
+}

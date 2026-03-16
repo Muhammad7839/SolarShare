@@ -11,6 +11,7 @@ env/
 
 # Environment variables
 .env
+.env.local
 
 # OS junk
 .DS_Store
@@ -22,3 +23,7 @@ env/
 # Node (frontend later)
 node_modules/
 dist/
+.next/
+
+# Local runtime databases
+*.sqlite3
