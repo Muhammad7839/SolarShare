@@ -1,20 +1,19 @@
-// Interactive contact form with backend integration for partnership and investor inquiries.
+// Demo request form that captures product walkthrough leads without duplicate submissions.
 "use client";
 
 import { useRef, useState } from "react";
-import { createIdempotencyKey, submitContactInquiryWithKey } from "@/lib/api";
-import { ContactInquiry } from "@/lib/types";
-import { BrandLogo } from "@/components/BrandLogo";
+import { createIdempotencyKey, submitDemoRequest } from "@/lib/api";
+import { DemoRequest } from "@/lib/types";
 
-const initialPayload: ContactInquiry = {
+const initialPayload: DemoRequest = {
   name: "",
   email: "",
-  interest: "investor_relations",
+  organization: "",
   message: ""
 };
 
-export function ContactForm() {
-  const [payload, setPayload] = useState<ContactInquiry>(initialPayload);
+export function DemoRequestForm() {
+  const [payload, setPayload] = useState<DemoRequest>(initialPayload);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +31,11 @@ export function ContactForm() {
     setMessage(null);
 
     try {
-      await submitContactInquiryWithKey(payload, {
-        idempotencyKey: createIdempotencyKey("contact")
-      });
-      setMessage("Inquiry received. SolarShare team will follow up shortly.");
+      await submitDemoRequest(payload, { idempotencyKey: createIdempotencyKey("demo") });
+      setMessage("Demo request received. SolarShare team will follow up shortly.");
       setPayload(initialPayload);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to submit inquiry.");
+      setError(submitError instanceof Error ? submitError.message : "Unable to submit demo request.");
     } finally {
       submitLockRef.current = false;
       setLoading(false);
@@ -47,9 +44,8 @@ export function ContactForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card">
-      <div className="mb-2 inline-flex rounded-xl border border-solarBlue-100 bg-solarBlue-50 px-2 py-1">
-        <BrandLogo full className="scale-[0.62] origin-left" />
-      </div>
+      <h3 className="text-xl font-semibold text-solarBlue-900">Request a Demo</h3>
+
       <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
         Name
         <input
@@ -74,20 +70,13 @@ export function ContactForm() {
       </label>
 
       <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
-        Inquiry Type
-        <select
-          value={payload.interest}
-          onChange={(event) =>
-            setPayload((prev) => ({ ...prev, interest: event.target.value as ContactInquiry["interest"] }))
-          }
+        Organization (optional)
+        <input
+          value={payload.organization || ""}
+          onChange={(event) => setPayload((prev) => ({ ...prev, organization: event.target.value }))}
+          maxLength={160}
           className="rounded-xl border border-solarBlue-100 px-4 py-3 outline-none ring-solarBlue-200 focus:ring"
-        >
-          <option value="investor_relations">Investor Relations</option>
-          <option value="partnership">Partnership</option>
-          <option value="methodology_question">Methodology Question</option>
-          <option value="customer_support">Customer Support</option>
-          <option value="other">Other</option>
-        </select>
+        />
       </label>
 
       <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
@@ -108,7 +97,7 @@ export function ContactForm() {
         disabled={loading}
         className="w-full rounded-xl bg-solarBlue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-solarBlue-900 disabled:cursor-not-allowed disabled:opacity-70"
       >
-        {loading ? "Submitting..." : "Submit Inquiry"}
+        {loading ? "Submitting..." : "Submit Demo Request"}
       </button>
 
       {message ? <p className="rounded-xl bg-energyGreen-100 px-3 py-2 text-sm font-semibold text-energyGreen-700">{message}</p> : null}

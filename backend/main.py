@@ -1,8 +1,12 @@
 """Local executable entrypoint for running the SolarShare FastAPI service."""
 
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 import uvicorn
+
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 
 def _as_bool(value: str) -> bool:

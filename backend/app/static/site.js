@@ -231,10 +231,17 @@
     status.classList.toggle("success-inline", !isError && Boolean(message));
   }
 
-  async function submitContactInquiry(payload) {
+  function createIdempotencyKey(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  async function submitContactInquiry(payload, idempotencyKey) {
     const response = await fetch("/contact-inquiries", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -257,8 +264,13 @@
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
+    let isSubmitting = false;
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (isSubmitting) {
+        return;
+      }
+      isSubmitting = true;
       setContactStatus("", false);
 
       const submitButton = form.querySelector("button[type='submit']");
@@ -275,7 +287,7 @@
       };
 
       try {
-        await submitContactInquiry(payload);
+        await submitContactInquiry(payload, createIdempotencyKey("contact"));
         form.reset();
         setContactStatus("Inquiry received. We will follow up shortly.", false);
         trackEvent("contact_submit", { interest: payload.interest });
@@ -283,6 +295,7 @@
         setContactStatus(error.message || "Unable to submit inquiry.", true);
         trackEvent("contact_submit_error", {});
       } finally {
+        isSubmitting = false;
         if (submitButton instanceof HTMLButtonElement) {
           submitButton.disabled = false;
           submitButton.textContent = "Submit Inquiry";

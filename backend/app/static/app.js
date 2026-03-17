@@ -151,6 +151,10 @@
     }
   }
 
+  function createIdempotencyKey(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
   function readJsonStorage(key, fallbackValue) {
     try {
       const raw = localStorage.getItem(key);
@@ -897,13 +901,14 @@
     });
   }
 
-  async function submitDemoRequest(payload) {
+  async function submitDemoRequest(payload, idempotencyKey) {
     const sessionId = localStorage.getItem("solarshare_session_id_v1") || "anonymous";
     const response = await fetch("/demo-requests", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-session-id": sessionId,
+        "Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(payload),
     });
@@ -926,9 +931,19 @@
     if (!(demoRequestForm instanceof HTMLFormElement) || !demoStatus) {
       return;
     }
+    const submitButton = demoRequestForm.querySelector("button[type='submit']");
+    let isSubmitting = false;
     demoRequestForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (isSubmitting) {
+        return;
+      }
+      isSubmitting = true;
       demoStatus.textContent = "";
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.disabled = true;
+        submitButton.textContent = "Submitting...";
+      }
       const payload = {
         name: (document.getElementById("demo-name") || {}).value || "",
         email: (document.getElementById("demo-email") || {}).value || "",
@@ -936,13 +951,19 @@
         message: (document.getElementById("demo-message") || {}).value || "",
       };
       try {
-        await submitDemoRequest(payload);
+        await submitDemoRequest(payload, createIdempotencyKey("demo"));
         demoRequestForm.reset();
         demoStatus.textContent = "Demo request received. We will follow up shortly.";
         trackEvent("demo_request_submit", { has_organization: Boolean(payload.organization) });
       } catch (error) {
         demoStatus.textContent = error.message || "Unable to submit demo request.";
         trackEvent("demo_request_error", {});
+      } finally {
+        isSubmitting = false;
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = false;
+          submitButton.textContent = "Submit Demo Request";
+        }
       }
     });
   }

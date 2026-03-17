@@ -101,3 +101,10 @@ export interface ContactInquiry {
   interest: "customer_support" | "methodology_question" | "partnership" | "investor_relations" | "other";
   message: string;
 }
+
+export interface DemoRequest {
+  name: string;
+  email: string;
+  organization?: string | null;
+  message: string;
+}

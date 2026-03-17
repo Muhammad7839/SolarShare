@@ -17,6 +17,12 @@ def _request(priority: str = "balanced", location: str = "New York City") -> Use
     return UserRequest(location=location, monthly_usage_kwh=600, priority=priority)
 
 
+def _reset_idempotency_state() -> None:
+    """Clear in-memory idempotency caches so tests remain isolated."""
+    app_main._IDEMPOTENCY_CACHE.clear()
+    app_main._IDEMPOTENCY_KEY_LOCKS.clear()
+
+
 def test_lowest_cost_priority_ranks_by_effective_price() -> None:
     ranked = logic.get_ranked_options(_request(priority="lowest_cost"))
     assert ranked
@@ -151,6 +157,19 @@ def test_admin_routes_require_password_header(monkeypatch) -> None:
     assert admin_summary.status_code == 401
 
 
+def test_admin_routes_reject_invalid_password_header(monkeypatch) -> None:
+    monkeypatch.setenv("ADMIN_PASSWORD", "secret_admin_pw")
+    headers = {"x-admin-password": "wrong_password"}
+    assert client.get("/admin", headers=headers).status_code == 401
+    assert client.get("/admin/analytics", headers=headers).status_code == 401
+
+
+def test_admin_routes_fail_when_password_not_configured(monkeypatch) -> None:
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+    assert client.get("/admin").status_code == 500
+    assert client.get("/admin/analytics").status_code == 500
+
+
 def test_admin_routes_accept_valid_password_header(monkeypatch) -> None:
     monkeypatch.setenv("ADMIN_PASSWORD", "secret_admin_pw")
     headers = {"x-admin-password": "secret_admin_pw"}
@@ -160,6 +179,12 @@ def test_admin_routes_accept_valid_password_header(monkeypatch) -> None:
     assert "text/html" in admin_page.headers.get("content-type", "")
     assert admin_summary.status_code == 200
     assert "totals" in admin_summary.json()
+
+
+def test_admin_static_html_is_not_publicly_accessible(monkeypatch) -> None:
+    monkeypatch.setenv("ADMIN_PASSWORD", "secret_admin_pw")
+    assert client.get("/static/admin.html").status_code == 404
+    assert client.get("/static/admin.html", headers={"x-admin-password": "secret_admin_pw"}).status_code == 404
 
 
 def test_location_resolve_endpoint_returns_confidence() -> None:
@@ -304,6 +329,58 @@ def test_contact_inquiry_persists_to_sqlite(tmp_path, monkeypatch) -> None:
     )
 
 
+def test_contact_inquiry_same_idempotency_key_returns_cached_response(tmp_path, monkeypatch) -> None:
+    _reset_idempotency_state()
+    contact_db_path = tmp_path / "contact_inquiries.sqlite3"
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_CONTACT_DB_PATH", str(contact_db_path))
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+
+    payload = {
+        "name": "Sami Rivera",
+        "email": "sami@example.com",
+        "interest": "partnership",
+        "message": "Need details about integration timelines and onboarding windows.",
+    }
+    headers = {"Idempotency-Key": "contact-idem-1"}
+
+    first = client.post("/contact-inquiries", json=payload, headers=headers)
+    second = client.post("/contact-inquiries", json=payload, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+    with sqlite3.connect(str(contact_db_path)) as connection:
+        total = connection.execute("SELECT COUNT(*) FROM contact_inquiries").fetchone()[0]
+    assert total == 1
+
+
+def test_contact_inquiry_different_idempotency_keys_create_separate_records(tmp_path, monkeypatch) -> None:
+    _reset_idempotency_state()
+    contact_db_path = tmp_path / "contact_inquiries.sqlite3"
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_CONTACT_DB_PATH", str(contact_db_path))
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+
+    payload = {
+        "name": "Sami Rivera",
+        "email": "sami@example.com",
+        "interest": "partnership",
+        "message": "Need details about integration timelines and onboarding windows.",
+    }
+    first = client.post("/contact-inquiries", json=payload, headers={"Idempotency-Key": "contact-idem-a"})
+    second = client.post("/contact-inquiries", json=payload, headers={"Idempotency-Key": "contact-idem-b"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["inquiry_id"] != first.json()["inquiry_id"]
+
+    with sqlite3.connect(str(contact_db_path)) as connection:
+        total = connection.execute("SELECT COUNT(*) FROM contact_inquiries").fetchone()[0]
+    assert total == 2
+
+
 def test_contact_inquiry_returns_success_when_crm_and_analytics_fail(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "contact_inquiries.sqlite3"
     monkeypatch.setenv("SOLAR_SHARE_CONTACT_DB_PATH", str(db_path))
@@ -327,6 +404,20 @@ def test_contact_inquiry_returns_success_when_crm_and_analytics_fail(tmp_path, m
     assert row is not None
 
 
+def test_contact_inquiry_returns_500_when_primary_db_write_fails(monkeypatch) -> None:
+    monkeypatch.setattr(app_main, "insert_contact_inquiry", lambda **_: (_ for _ in ()).throw(RuntimeError("db down")))
+    response = client.post(
+        "/contact-inquiries",
+        json={
+            "name": "Primary Failure",
+            "email": "primary@example.com",
+            "interest": "other",
+            "message": "This should fail before side effects run.",
+        },
+    )
+    assert response.status_code == 500
+
+
 def test_demo_request_returns_success_when_analytics_fails(tmp_path, monkeypatch) -> None:
     ops_db_path = tmp_path / "ops_analytics.sqlite3"
     monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
@@ -347,6 +438,44 @@ def test_demo_request_returns_success_when_analytics_fails(tmp_path, monkeypatch
     with sqlite3.connect(str(ops_db_path)) as connection:
         row = connection.execute("SELECT id FROM crm_leads WHERE id = ?", (lead_id,)).fetchone()
     assert row is not None
+
+
+def test_demo_request_same_idempotency_key_returns_cached_response(tmp_path, monkeypatch) -> None:
+    _reset_idempotency_state()
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+
+    payload = {
+        "name": "Taylor North",
+        "email": "taylor@example.com",
+        "organization": "Solar Ops",
+        "message": "Please schedule a walkthrough of the customer onboarding setup.",
+    }
+    headers = {"Idempotency-Key": "demo-idem-1"}
+    first = client.post("/demo-requests", json=payload, headers=headers)
+    second = client.post("/demo-requests", json=payload, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+    with sqlite3.connect(str(ops_db_path)) as connection:
+        total = connection.execute("SELECT COUNT(*) FROM crm_leads WHERE source = 'demo_request'").fetchone()[0]
+    assert total == 1
+
+
+def test_demo_request_returns_500_when_primary_db_write_fails(monkeypatch) -> None:
+    monkeypatch.setattr(app_main, "insert_crm_lead", lambda **_: (_ for _ in ()).throw(RuntimeError("db down")))
+    response = client.post(
+        "/demo-requests",
+        json={
+            "name": "Primary Failure",
+            "email": "primary@example.com",
+            "organization": "Org",
+            "message": "This should fail before side effects run for demo flow.",
+        },
+    )
+    assert response.status_code == 500
 
 
 def test_contact_inquiry_rate_limit_enforced(monkeypatch) -> None:

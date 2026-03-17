@@ -1,5 +1,6 @@
 // Contact page with clean information architecture and backend-connected inquiry form.
 import { ContactForm } from "@/components/ContactForm";
+import { DemoRequestForm } from "@/components/DemoRequestForm";
 import { MotionReveal } from "@/components/MotionReveal";
 import { SectionTitle } from "@/components/SectionTitle";
 
@@ -31,6 +32,12 @@ export default function ContactPage() {
 
         <MotionReveal delay={0.08}>
           <ContactForm />
+        </MotionReveal>
+      </section>
+
+      <section className="mt-6">
+        <MotionReveal delay={0.12}>
+          <DemoRequestForm />
         </MotionReveal>
       </section>
     </main>

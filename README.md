@@ -1,131 +1,137 @@
 # SolarShare
 
-SolarShare is a full-stack SaaS-style platform for community-solar comparison. It includes a Next.js frontend and a FastAPI backend for recommendations, location resolution, contact/demo intake, analytics tracking, and admin funnel visibility.
+## 1. Project Overview
+SolarShare is a full-stack startup project for community-solar decision support. It combines a FastAPI backend (recommendation, intake, analytics) with a Next.js frontend (customer-facing web app).
 
-## Tech Stack
-
-- Backend: FastAPI, Pydantic, SQLite, Uvicorn
+## 2. Tech Stack
+- Backend: Python, FastAPI, Pydantic, SQLite, Uvicorn, pytest
 - Frontend: Next.js (App Router), React, TypeScript, Tailwind CSS
-- Tooling: pytest, ESLint
+- Runtime config: `.env` files for backend and frontend
 
-## Repository Structure
+## 3. Project Structure
+```text
+SolarShare/
+├── backend/      # FastAPI API, persistence helpers, tests
+├── frontend/     # Next.js web application
+├── docs/         # Supporting documentation
+└── scripts/      # Utility scripts
+```
 
-- `backend/`: FastAPI service and backend tests
-- `backend/app/`: API routes, schemas, business logic, persistence helpers
-- `frontend/`: Next.js web app
-- `docs/`: supporting project notes
-- `scripts/`: local utility scripts
+## 4. Prerequisites
+- Python: 3.9+
+- Node.js: 18+
+- npm: 9+
 
-## Local Setup (Fresh Clone)
+## 5. Backend Setup
 
-### Prerequisites
-
-- Python 3.9+
-- Node.js 18+
-- npm 9+
-
-### Backend
-
-From repository root:
-
+### Mac
 ```bash
 cd backend
+cp .env.example .env
 python3 -m venv venv
-```
-
-Activate virtual environment:
-
-- macOS/Linux:
-
-```bash
 source venv/bin/activate
-```
-
-- Windows (PowerShell):
-
-```powershell
-py -3 -m venv venv
-venv\Scripts\Activate.ps1
-```
-
-Install dependencies and run:
-
-```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-python3 main.py
 ```
 
-Alternative run command:
-
-```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+### Windows
+Command Prompt:
+```bat
+cd backend
+copy .env.example .env
+python -m venv venv
+venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-Backend URL: `http://127.0.0.1:8000`
+PowerShell:
+```powershell
+cd backend
+Copy-Item .env.example .env
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-### Frontend
+## 6. Frontend Setup
 
-From repository root:
-
+### Mac
 ```bash
 cd frontend
+cp .env.example .env.local
 npm install
+```
+
+### Windows
+Command Prompt:
+```bat
+cd frontend
+copy .env.example .env.local
+npm install
+```
+
+PowerShell:
+```powershell
+cd frontend
+Copy-Item .env.example .env.local
+npm install
+```
+
+## 7. Running the App
+Start backend and frontend in separate terminals.
+
+Backend:
+```bash
+cd backend
+# activate venv first
+python main.py
+```
+
+Frontend:
+```bash
+cd frontend
 npm run dev
 ```
 
-Frontend URL: `http://127.0.0.1:3000`
+Local URLs:
+- Frontend: `http://127.0.0.1:3000`
+- Backend: `http://127.0.0.1:8000`
 
-## Environment Variables
+## 8. Environment Variables
 
-### Backend
+### Backend (`backend/.env`)
+Create from `backend/.env.example`. Common keys:
+- `ADMIN_PASSWORD` (required for admin endpoints)
+- `SOLAR_SHARE_CORS_ORIGINS`
+- `SOLAR_SHARE_HOST`, `SOLAR_SHARE_PORT`, `SOLAR_SHARE_RELOAD`
+- `SOLAR_SHARE_CONTACT_DB_PATH`, `SOLAR_SHARE_OPS_DB_PATH`
+- `SOLAR_SHARE_IDEMPOTENCY_TTL_SECONDS` (duplicate-submit protection window)
 
-- `ADMIN_PASSWORD` (required for `/admin` and `/admin/analytics`)
-- `SOLAR_SHARE_CORS_ORIGINS` (comma-separated allowed origins)
-- `SOLAR_SHARE_TRUST_PROXY_HEADERS` (`1` to trust `x-forwarded-for`)
-- `SOLAR_SHARE_RATE_LIMIT_WINDOW_SECONDS`
-- `SOLAR_SHARE_RATE_LIMIT_LIVE_COMPARISON_PER_MIN`
-- `SOLAR_SHARE_RATE_LIMIT_CONTACT_PER_MIN`
-- `SOLAR_SHARE_RATE_LIMIT_ASSISTANT_PER_MIN`
-- `SOLAR_SHARE_RATE_LIMIT_ANALYTICS_PER_MIN`
-- `SOLAR_SHARE_CONTACT_DB_PATH`
-- `SOLAR_SHARE_OPS_DB_PATH`
-- `SOLAR_SHARE_REAL_DATA_DISABLE_NETWORK`
-- `SOLAR_SHARE_ASSISTANT_DISABLE_NETWORK`
-- `SOLAR_SHARE_AI_API_KEY`
-- `SOLAR_SHARE_AI_BASE_URL`
-- `SOLAR_SHARE_AI_MODEL`
-- `SOLAR_SHARE_EIA_API_KEY`
+The backend now auto-loads `backend/.env` when started with `python main.py`.
 
-### Frontend
+### Frontend (`frontend/.env.local`)
+Create from `frontend/.env.example`.
+- `NEXT_PUBLIC_API_BASE_URL` (for non-local backend URLs)
 
-- `NEXT_PUBLIC_API_BASE_URL` (backend base URL for non-local deployment)
+## 9. Common Errors + Fixes
+- `address already in use`: Port 8000 or 3000 is occupied. Stop the other process or change ports.
+- PowerShell activation blocked: run `Set-ExecutionPolicy -Scope Process Bypass` and retry `Activate.ps1`.
+- Frontend cannot reach backend: verify backend is running and `NEXT_PUBLIC_API_BASE_URL` is correct.
 
-## Run Quality Checks
+## 10. One-command quick start (optional)
+No cross-platform single command is included in this repo to avoid shell-specific behavior. Use the setup and run commands above for reliable Mac/Windows startup.
 
-### Backend tests
-
+## Verification Commands
+Backend tests:
 ```bash
 cd backend
 pytest -q
 ```
 
-### Frontend lint/build
-
+Frontend production build:
 ```bash
 cd frontend
-npm run lint
 npm run build
 ```
-
-## Admin Access
-
-Admin endpoints are protected with `x-admin-password`:
-
-- `GET /admin`
-- `GET /admin/analytics`
-
-Set `ADMIN_PASSWORD`, then send the same value in the request header.
-
-## API Contract
-
-See `backend/app/API_CONTRACT.md`.

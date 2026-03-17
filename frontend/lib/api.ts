@@ -3,6 +3,7 @@ import {
   AssistantChatRequest,
   AssistantChatResponse,
   ContactInquiry,
+  DemoRequest,
   LiveComparisonResponse,
   LocationResolveRequest,
   LocationResolveResponse,
@@ -50,9 +51,37 @@ export async function fetchLiveComparison(payload: UserRequest): Promise<LiveCom
 }
 
 export async function submitContactInquiry(payload: ContactInquiry): Promise<{ inquiry_id: string; received: boolean }> {
+  return submitContactInquiryWithKey(payload);
+}
+
+interface SubmissionOptions {
+  idempotencyKey?: string;
+}
+
+function withIdempotencyHeaders(options?: SubmissionOptions): Record<string, string> {
+  if (!options?.idempotencyKey) {
+    return defaultHeaders;
+  }
+  return {
+    ...defaultHeaders,
+    "Idempotency-Key": options.idempotencyKey
+  };
+}
+
+export function createIdempotencyKey(prefix: string): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export async function submitContactInquiryWithKey(
+  payload: ContactInquiry,
+  options?: SubmissionOptions
+): Promise<{ inquiry_id: string; received: boolean }> {
   const response = await fetch(apiUrl("/contact-inquiries"), {
     method: "POST",
-    headers: defaultHeaders,
+    headers: withIdempotencyHeaders(options),
     body: JSON.stringify(payload)
   });
 
@@ -62,6 +91,24 @@ export async function submitContactInquiry(payload: ContactInquiry): Promise<{ i
   }
 
   return response.json() as Promise<{ inquiry_id: string; received: boolean }>;
+}
+
+export async function submitDemoRequest(
+  payload: DemoRequest,
+  options?: SubmissionOptions
+): Promise<{ lead_id: string; received: boolean }> {
+  const response = await fetch(apiUrl("/demo-requests"), {
+    method: "POST",
+    headers: withIdempotencyHeaders(options),
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorBody = await safeJson(response);
+    throw new Error(resolveErrorMessage(errorBody, "Unable to submit demo request."));
+  }
+
+  return response.json() as Promise<{ lead_id: string; received: boolean }>;
 }
 
 export async function resolveLocation(payload: LocationResolveRequest): Promise<LocationResolveResponse> {
