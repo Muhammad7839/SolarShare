@@ -137,10 +137,29 @@ def test_live_comparison_zip_resolution_returns_location_details() -> None:
 
 
 def test_site_pages_are_served() -> None:
-    for route in ["/", "/about", "/methodology", "/pricing", "/contact", "/admin"]:
+    for route in ["/", "/about", "/methodology", "/pricing", "/contact"]:
         response = client.get(route)
         assert response.status_code == 200
         assert "text/html" in response.headers.get("content-type", "")
+
+
+def test_admin_routes_require_password_header(monkeypatch) -> None:
+    monkeypatch.setenv("ADMIN_PASSWORD", "secret_admin_pw")
+    admin_page = client.get("/admin")
+    admin_summary = client.get("/admin/analytics")
+    assert admin_page.status_code == 401
+    assert admin_summary.status_code == 401
+
+
+def test_admin_routes_accept_valid_password_header(monkeypatch) -> None:
+    monkeypatch.setenv("ADMIN_PASSWORD", "secret_admin_pw")
+    headers = {"x-admin-password": "secret_admin_pw"}
+    admin_page = client.get("/admin", headers=headers)
+    admin_summary = client.get("/admin/analytics", headers=headers)
+    assert admin_page.status_code == 200
+    assert "text/html" in admin_page.headers.get("content-type", "")
+    assert admin_summary.status_code == 200
+    assert "totals" in admin_summary.json()
 
 
 def test_location_resolve_endpoint_returns_confidence() -> None:
@@ -182,6 +201,7 @@ def test_assistant_chat_rate_limit_enforced(monkeypatch) -> None:
 def test_analytics_event_and_admin_summary(tmp_path, monkeypatch) -> None:
     ops_db_path = tmp_path / "ops_analytics.sqlite3"
     monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+    monkeypatch.setenv("ADMIN_PASSWORD", "secret_admin_pw")
 
     event_response = client.post(
         "/analytics/events",
@@ -190,7 +210,7 @@ def test_analytics_event_and_admin_summary(tmp_path, monkeypatch) -> None:
     assert event_response.status_code == 200
     assert event_response.json()["accepted"] is True
 
-    admin_response = client.get("/admin/analytics")
+    admin_response = client.get("/admin/analytics", headers={"x-admin-password": "secret_admin_pw"})
     assert admin_response.status_code == 200
     summary = admin_response.json()
     assert summary["totals"]["events"] >= 1
@@ -282,6 +302,51 @@ def test_contact_inquiry_persists_to_sqlite(tmp_path, monkeypatch) -> None:
         "investor_relations",
         "Please share deployment timeline and onboarding details.",
     )
+
+
+def test_contact_inquiry_returns_success_when_crm_and_analytics_fail(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "contact_inquiries.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_CONTACT_DB_PATH", str(db_path))
+    monkeypatch.setattr(app_main, "insert_crm_lead", lambda **_: (_ for _ in ()).throw(RuntimeError("crm down")))
+    monkeypatch.setattr(app_main, "insert_analytics_event", lambda **_: (_ for _ in ()).throw(RuntimeError("analytics down")))
+
+    response = client.post(
+        "/contact-inquiries",
+        json={
+            "name": "Jordan Hayes",
+            "email": "jordan@example.com",
+            "interest": "other",
+            "message": "Need support while moving to a new billing cycle.",
+        },
+    )
+    assert response.status_code == 200
+    inquiry_id = response.json()["inquiry_id"]
+
+    with sqlite3.connect(str(db_path)) as connection:
+        row = connection.execute("SELECT id FROM contact_inquiries WHERE id = ?", (inquiry_id,)).fetchone()
+    assert row is not None
+
+
+def test_demo_request_returns_success_when_analytics_fails(tmp_path, monkeypatch) -> None:
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+    monkeypatch.setattr(app_main, "insert_analytics_event", lambda **_: (_ for _ in ()).throw(RuntimeError("analytics down")))
+
+    response = client.post(
+        "/demo-requests",
+        json={
+            "name": "Taylor North",
+            "email": "taylor@example.com",
+            "organization": "Solar Ops",
+            "message": "Please schedule a walkthrough of the customer onboarding setup.",
+        },
+    )
+    assert response.status_code == 200
+    lead_id = response.json()["lead_id"]
+
+    with sqlite3.connect(str(ops_db_path)) as connection:
+        row = connection.execute("SELECT id FROM crm_leads WHERE id = ?", (lead_id,)).fetchone()
+    assert row is not None
 
 
 def test_contact_inquiry_rate_limit_enforced(monkeypatch) -> None:

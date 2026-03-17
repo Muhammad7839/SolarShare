@@ -3,11 +3,14 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+**/.pytest_cache/
 
 # Virtual environments
 .venv/
 venv/
 env/
+backend/.venv/
 
 # Environment variables
 .env
@@ -22,8 +25,10 @@ env/
 
 # Node (frontend later)
 node_modules/
+**/node_modules/
 dist/
 .next/
+frontend/.next/
 
 # Local runtime databases
 *.sqlite3

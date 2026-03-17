@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
 
+DEFAULT_OPS_DB_PATH = str(Path(__file__).resolve().parents[1] / "ops_analytics.sqlite3")
+
 
 def _db_path() -> str:
     """Resolve operations database path from env with local default."""
-    return os.getenv("SOLAR_SHARE_OPS_DB_PATH", "./ops_analytics.sqlite3")
+    return os.getenv("SOLAR_SHARE_OPS_DB_PATH", DEFAULT_OPS_DB_PATH)
 
 
 def _ensure_parent_directory(path: str) -> None:

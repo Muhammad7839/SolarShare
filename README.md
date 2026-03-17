@@ -1,57 +1,71 @@
-# SolarShare Repository
+# SolarShare
 
-This repository contains the SolarShare website and API used for community-solar comparison, location resolution, contact capture, analytics events, and admin funnel visibility.
+SolarShare is a full-stack SaaS-style platform for community-solar comparison. It includes a Next.js frontend and a FastAPI backend for recommendations, location resolution, contact/demo intake, analytics tracking, and admin funnel visibility.
 
-## Project Layout
+## Tech Stack
 
-- `frontend/`  
-  Next.js website (customer/investor pages, guided comparison UI, assistant widget, cinematic/light theme).
-- `backend/`  
-  FastAPI service (comparison engine, location resolution, assistant endpoint, analytics/contact/demo APIs, SQLite persistence).
-- `backend/app/static/`  
-  Static fallback web app served by FastAPI for single-service deployment scenarios.
-- `docs/`  
-  Supporting notes and local skill integration references.
-- `scripts/`  
-  Utility scripts used for local workflows.
+- Backend: FastAPI, Pydantic, SQLite, Uvicorn
+- Frontend: Next.js (App Router), React, TypeScript, Tailwind CSS
+- Tooling: pytest, ESLint
 
-## Architecture Summary
+## Repository Structure
 
-- Frontend calls backend API endpoints:
-  - `POST /live-comparison`
-  - `POST /location-resolve`
-  - `POST /assistant-chat`
-  - `POST /contact-inquiries`
-  - `POST /analytics/events`
-  - `POST /demo-requests`
-- Backend stores:
-  - Contact records in `contact_inquiries.sqlite3`
-  - Analytics + CRM leads in `ops_analytics.sqlite3`
-- Backend includes:
-  - Request validation via Pydantic schemas
-  - Per-endpoint rate limiting
-  - Structured request/event logging
-  - Deterministic fallback behavior when external APIs are unavailable
+- `backend/`: FastAPI service and backend tests
+- `backend/app/`: API routes, schemas, business logic, persistence helpers
+- `frontend/`: Next.js web app
+- `docs/`: supporting project notes
+- `scripts/`: local utility scripts
 
-## Local Development
+## Local Setup (Fresh Clone)
 
 ### Prerequisites
 
 - Python 3.9+
 - Node.js 18+
-- npm
+- npm 9+
 
-### 1) Run backend
+### Backend
+
+From repository root:
 
 ```bash
 cd backend
-python3 -m pip install -r requirements.txt
-uvicorn app.main:app --reload
+python3 -m venv venv
+```
+
+Activate virtual environment:
+
+- macOS/Linux:
+
+```bash
+source venv/bin/activate
+```
+
+- Windows (PowerShell):
+
+```powershell
+py -3 -m venv venv
+venv\Scripts\Activate.ps1
+```
+
+Install dependencies and run:
+
+```bash
+pip install -r requirements.txt
+python3 main.py
+```
+
+Alternative run command:
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Backend URL: `http://127.0.0.1:8000`
 
-### 2) Run frontend
+### Frontend
+
+From repository root:
 
 ```bash
 cd frontend
@@ -59,14 +73,15 @@ npm install
 npm run dev
 ```
 
-Frontend URL: `http://localhost:3000`
+Frontend URL: `http://127.0.0.1:3000`
 
 ## Environment Variables
 
 ### Backend
 
+- `ADMIN_PASSWORD` (required for `/admin` and `/admin/analytics`)
 - `SOLAR_SHARE_CORS_ORIGINS` (comma-separated allowed origins)
-- `SOLAR_SHARE_TRUST_PROXY_HEADERS` (`1` to trust `x-forwarded-for` from a known proxy)
+- `SOLAR_SHARE_TRUST_PROXY_HEADERS` (`1` to trust `x-forwarded-for`)
 - `SOLAR_SHARE_RATE_LIMIT_WINDOW_SECONDS`
 - `SOLAR_SHARE_RATE_LIMIT_LIVE_COMPARISON_PER_MIN`
 - `SOLAR_SHARE_RATE_LIMIT_CONTACT_PER_MIN`
@@ -83,10 +98,9 @@ Frontend URL: `http://localhost:3000`
 
 ### Frontend
 
-- `NEXT_PUBLIC_API_BASE_URL`  
-  Set this to the backend URL for non-local deployment.
+- `NEXT_PUBLIC_API_BASE_URL` (backend base URL for non-local deployment)
 
-## Quality Checks
+## Run Quality Checks
 
 ### Backend tests
 
@@ -95,7 +109,7 @@ cd backend
 pytest -q
 ```
 
-### Frontend checks
+### Frontend lint/build
 
 ```bash
 cd frontend
@@ -103,19 +117,15 @@ npm run lint
 npm run build
 ```
 
-## Security and Reliability Notes
+## Admin Access
 
-- Analytics event identifiers are validated to safe token formats.
-- Admin analytics rendering escapes HTML to avoid injection from untrusted event content.
-- API responses include baseline security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`).
-- Rate limiting defaults are enabled on public write-heavy endpoints.
+Admin endpoints are protected with `x-admin-password`:
+
+- `GET /admin`
+- `GET /admin/analytics`
+
+Set `ADMIN_PASSWORD`, then send the same value in the request header.
 
 ## API Contract
 
-See `backend/app/API_CONTRACT.md` for request/response examples.
-
-## Deployment
-
-- Frontend can be deployed to Vercel (`frontend/vercel.json`).
-- Backend can be deployed to Render (`render.yaml` / `DEPLOY_RENDER.md`).
-- For split deployment, set frontend `NEXT_PUBLIC_API_BASE_URL` to the backend domain.
+See `backend/app/API_CONTRACT.md`.

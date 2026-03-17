@@ -21,6 +21,12 @@ GET /contact
 Description:
 Serves additional static website pages for multi-page navigation.
 
+GET /admin
+Description:
+Serves the static admin operations page.
+Requires request header `x-admin-password` matching `ADMIN_PASSWORD`.
+Returns `401` when missing or incorrect.
+
 POST /live-comparison
 Description:
 Returns ranked options, recommendation, and live market context in a single payload.
@@ -115,15 +121,21 @@ Validation:
 GET /admin/analytics
 Description:
 Returns aggregate operations metrics, event counts, and funnel drop-off summary.
+Requires request header `x-admin-password` matching `ADMIN_PASSWORD`.
+Returns `401` when missing or incorrect.
 
 POST /demo-requests
 Description:
 Accepts demo requests and normalizes payload into CRM-ready lead storage.
+The lead record is persisted first as source of truth.
+Analytics forwarding runs as a best-effort side effect and does not fail the request.
 
 POST /contact-inquiries
 Description:
 Accepts validated inquiry submissions from the contact page.
 Persists inquiries to SQLite-backed storage and is rate limited per client IP.
+Inquiry persistence is treated as source of truth.
+CRM and analytics forwarding run as best-effort side effects and do not fail the request.
 
 Request:
 {

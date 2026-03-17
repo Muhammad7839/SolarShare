@@ -73,6 +73,8 @@
     <script src="/static/site.js"></script>
     <script>
       (function () {
+        const ADMIN_PASSWORD_STORAGE_KEY = "solarshare_admin_password";
+
         function escapeHtml(value) {
           var text = String(value == null ? "" : value);
           return text
@@ -92,8 +94,39 @@
             "</p></article>"
           );
         }
+
+        function getAdminPassword() {
+          try {
+            var cached = sessionStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) || "";
+            if (cached.trim()) {
+              return cached.trim();
+            }
+          } catch (error) {}
+
+          var entered = window.prompt("Enter admin password");
+          if (!entered || !entered.trim()) {
+            throw new Error("admin_password_required");
+          }
+          var normalized = entered.trim();
+          try {
+            sessionStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, normalized);
+          } catch (error) {}
+          return normalized;
+        }
+
         async function loadAnalytics() {
-          const response = await fetch("/admin/analytics");
+          const response = await fetch("/admin/analytics", {
+            headers: { "x-admin-password": getAdminPassword() },
+          });
+          if (response.status === 401) {
+            try {
+              sessionStorage.removeItem(ADMIN_PASSWORD_STORAGE_KEY);
+            } catch (error) {}
+            throw new Error("admin_auth_failed");
+          }
+          if (!response.ok) {
+            throw new Error("admin_analytics_unavailable");
+          }
           const payload = await response.json();
           const totals = payload.totals || {};
           const byEvent = payload.by_event || {};
@@ -135,9 +168,15 @@
             })
             .join("");
         }
-        loadAnalytics().catch(function () {
+        loadAnalytics().catch(function (error) {
+          var message = "Unable to load analytics.";
+          if (error && error.message === "admin_password_required") {
+            message = "Admin password is required.";
+          } else if (error && error.message === "admin_auth_failed") {
+            message = "Admin authentication failed.";
+          }
           document.getElementById("admin-totals").innerHTML =
-            '<article class="insight-card"><h3>Status</h3><p>Unable to load analytics.</p></article>';
+            '<article class="insight-card"><h3>Status</h3><p>' + escapeHtml(message) + "</p></article>";
         });
       })();
     </script>

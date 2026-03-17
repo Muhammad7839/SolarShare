@@ -52,11 +52,19 @@ export function ProductPreview() {
           <div className="mt-4 space-y-3">
             <div className="rounded-xl border border-solarBlue-100 p-3">
               <p className="text-sm font-semibold text-solarBlue-900">Long Island Community Solar</p>
-              <p className="text-sm text-solarBlue-900/60">$112/month • 93% reliability • 9.8 miles</p>
+              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-solarBlue-900/60">
+                <li>$112/month</li>
+                <li>93% reliability</li>
+                <li>9.8 miles</li>
+              </ul>
             </div>
             <div className="rounded-xl border border-solarBlue-100 p-3">
               <p className="text-sm font-semibold text-solarBlue-900">Northeast Shared Solar</p>
-              <p className="text-sm text-solarBlue-900/60">$118/month • 90% reliability • 14.2 miles</p>
+              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-solarBlue-900/60">
+                <li>$118/month</li>
+                <li>90% reliability</li>
+                <li>14.2 miles</li>
+              </ul>
             </div>
           </div>
         </article>

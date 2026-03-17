@@ -1,6 +1,7 @@
 """FastAPI application entrypoints and HTTP-facing request handling."""
 
 import json
+import hmac
 import logging
 import os
 import threading
@@ -73,6 +74,7 @@ LIVE_COMPARISON_RATE_LIMIT = int(os.getenv("SOLAR_SHARE_RATE_LIMIT_LIVE_COMPARIS
 CONTACT_RATE_LIMIT = int(os.getenv("SOLAR_SHARE_RATE_LIMIT_CONTACT_PER_MIN", "20"))
 ASSISTANT_RATE_LIMIT = int(os.getenv("SOLAR_SHARE_RATE_LIMIT_ASSISTANT_PER_MIN", "80"))
 ANALYTICS_RATE_LIMIT = int(os.getenv("SOLAR_SHARE_RATE_LIMIT_ANALYTICS_PER_MIN", "200"))
+ADMIN_PASSWORD_HEADER = "x-admin-password"
 TRUST_PROXY_HEADERS = os.getenv("SOLAR_SHARE_TRUST_PROXY_HEADERS", "0") == "1"
 _RATE_LIMIT_BUCKETS: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 _RATE_LIMIT_LOCK = threading.Lock()
@@ -127,6 +129,27 @@ def _enforce_rate_limit(request: Request, bucket: str, limit: int) -> None:
         if len(requests) >= limit:
             raise HTTPException(status_code=429, detail="Too many requests. Please retry shortly.")
         requests.append(now)
+
+
+def _require_admin_access(request: Request) -> None:
+    """Protect admin-only routes with a shared password header."""
+    configured_password = (os.getenv("ADMIN_PASSWORD") or "").strip()
+    provided_password = (request.headers.get(ADMIN_PASSWORD_HEADER) or "").strip()
+
+    if not configured_password:
+        logger.error(
+            json.dumps(
+                {
+                    "event": "admin_auth_misconfigured",
+                    "request_id": getattr(request.state, "request_id", None),
+                    "path": request.url.path,
+                }
+            )
+        )
+        raise HTTPException(status_code=500, detail="Admin access is not configured.")
+
+    if not provided_password or not hmac.compare_digest(provided_password, configured_password):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 @app.middleware("http")
@@ -218,7 +241,8 @@ def contact_page():
 
 
 @app.get("/admin")
-def admin_page():
+def admin_page(request: Request):
+    _require_admin_access(request)
     return _serve_page("admin.html")
 
 
@@ -328,8 +352,9 @@ def analytics_events(payload: AnalyticsEventIn, http_request: Request):
 
 
 @app.get("/admin/analytics", response_model=AdminAnalyticsOut)
-def admin_analytics(_: Request):
+def admin_analytics(request: Request):
     """Return aggregate analytics and drop-off summary for operations view."""
+    _require_admin_access(request)
     return get_admin_analytics_summary()
 
 
@@ -344,7 +369,20 @@ def contact_inquiries(payload: ContactInquiryIn, http_request: Request):
             interest=payload.interest,
             message=payload.message,
         )
-        insert_crm_lead(
+    except Exception as exc:
+        logger.exception(
+            json.dumps(
+                {
+                    "event": "contact_inquiry_db_write_failed",
+                    "request_id": getattr(http_request.state, "request_id", None),
+                    "path": http_request.url.path,
+                }
+            )
+        )
+        raise HTTPException(status_code=500, detail="Unable to persist inquiry.") from exc
+
+    try:
+        lead_id = insert_crm_lead(
             source="contact_inquiry",
             name=payload.name,
             email=str(payload.email),
@@ -355,26 +393,44 @@ def contact_inquiries(payload: ContactInquiryIn, http_request: Request):
                 "inquiry_id": inquiry_id,
             },
         )
+        logger.info(
+            json.dumps(
+                {
+                    "event": "contact_inquiry_forwarded_to_crm",
+                    "request_id": getattr(http_request.state, "request_id", None),
+                    "inquiry_id": inquiry_id,
+                    "lead_id": lead_id,
+                }
+            )
+        )
+    except Exception:
+        logger.exception(
+            json.dumps(
+                {
+                    "event": "contact_inquiry_crm_forward_failed",
+                    "request_id": getattr(http_request.state, "request_id", None),
+                    "inquiry_id": inquiry_id,
+                }
+            )
+        )
+
+    try:
         insert_analytics_event(
             event_name="contact_submit",
             page="/contact",
             session_id=http_request.headers.get("x-session-id"),
             metadata={"interest": payload.interest},
         )
-    except Exception as exc:
+    except Exception:
         logger.exception(
             json.dumps(
                 {
-                    "event": "contact_inquiry_write_failed",
+                    "event": "contact_inquiry_analytics_write_failed",
                     "request_id": getattr(http_request.state, "request_id", None),
-                    "path": http_request.url.path,
+                    "inquiry_id": inquiry_id,
                 }
             )
         )
-        raise HTTPException(
-            status_code=503,
-            detail="Inquiry service temporarily unavailable. Please retry shortly.",
-        ) from exc
 
     logger.info(
         json.dumps(
@@ -405,14 +461,35 @@ def demo_requests(payload: DemoRequestIn, http_request: Request):
                 "request_path": str(http_request.url.path),
             },
         )
+    except Exception as exc:
+        logger.exception(
+            json.dumps(
+                {
+                    "event": "demo_request_db_write_failed",
+                    "request_id": getattr(http_request.state, "request_id", None),
+                    "path": http_request.url.path,
+                }
+            )
+        )
+        raise HTTPException(status_code=500, detail="Unable to persist demo request.") from exc
+
+    try:
         insert_analytics_event(
             event_name="demo_request_submit",
             page="/",
             session_id=http_request.headers.get("x-session-id"),
             metadata={"organization": payload.organization or ""},
         )
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Demo request service temporarily unavailable.") from exc
+    except Exception:
+        logger.exception(
+            json.dumps(
+                {
+                    "event": "demo_request_analytics_write_failed",
+                    "request_id": getattr(http_request.state, "request_id", None),
+                    "lead_id": lead_id,
+                }
+            )
+        )
     logger.info(
         json.dumps(
             {
