@@ -279,6 +279,24 @@ main {
   background: rgba(118, 190, 67, 0.16);
 }
 
+.dark .comparison-stepper span {
+  border-color: rgba(110, 167, 255, 0.34);
+  background: rgba(13, 30, 57, 0.88);
+  color: #dceaff;
+}
+
+.dark .comparison-stepper span.active {
+  border-color: rgba(147, 197, 253, 0.95);
+  background: rgba(37, 99, 235, 0.35);
+  color: #f8fbff;
+}
+
+.dark .comparison-stepper span.done {
+  border-color: rgba(110, 231, 183, 0.55);
+  background: rgba(16, 185, 129, 0.2);
+  color: #d1fae5;
+}
+
 .assistant-fab {
   position: fixed;
   right: 1.25rem;
@@ -474,6 +492,7 @@ html.theme-cinematic .bg-white\/95 {
 }
 
 html.theme-cinematic .text-solarBlue-900,
+html.theme-cinematic .text-solarBlue-900\/60,
 html.theme-cinematic .text-solarBlue-900\/70,
 html.theme-cinematic .text-solarBlue-900\/75,
 html.theme-cinematic .text-solarBlue-900\/80 {

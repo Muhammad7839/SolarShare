@@ -10,37 +10,60 @@ import {
   UserRequest
 } from "@/lib/types";
 
-const configuredApiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
-const defaultApiBase = configuredApiBase.replace(/\/+$/, "");
 const defaultHeaders = { "Content-Type": "application/json" };
 
-function runtimeApiBase(): string {
-  if (defaultApiBase) {
-    return defaultApiBase;
+function localDevFallbackApiBase(): string {
+  if (process.env.NODE_ENV === "production") {
+    return "";
   }
+
   if (typeof window !== "undefined") {
-    const host = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname;
-    if (window.location.port === "3000" || window.location.port === "3001") {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
       return `http://${host}:8000`;
     }
   }
-  return "";
+
+  return "http://127.0.0.1:8000";
+}
+
+function apiBaseUrl(): string {
+  const configuredApiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim();
+  if (configuredApiBase) {
+    return configuredApiBase.replace(/\/+$/, "");
+  }
+
+  const fallbackApiBase = localDevFallbackApiBase().trim();
+  if (fallbackApiBase) {
+    return fallbackApiBase.replace(/\/+$/, "");
+  }
+
+  throw new Error("NEXT_PUBLIC_API_BASE_URL is required in production.");
 }
 
 function apiUrl(path: string): string {
-  const base = runtimeApiBase();
-  if (!base) {
-    return path;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${apiBaseUrl()}${normalizedPath}`;
+}
+
+function backendUnavailableMessage(): string {
+  return "Unable to connect to SolarShare API. Start backend with: cd backend && python main.py";
+}
+
+async function postJson(path: string, body: unknown, headers: Record<string, string> = defaultHeaders): Promise<Response> {
+  try {
+    return await fetch(apiUrl(path), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body)
+    });
+  } catch {
+    throw new Error(backendUnavailableMessage());
   }
-  return `${base}${path}`;
 }
 
 export async function fetchLiveComparison(payload: UserRequest): Promise<LiveComparisonResponse> {
-  const response = await fetch(apiUrl("/live-comparison"), {
-    method: "POST",
-    headers: defaultHeaders,
-    body: JSON.stringify(payload)
-  });
+  const response = await postJson("/live-comparison", payload);
 
   if (!response.ok) {
     const errorBody = await safeJson(response);
@@ -79,11 +102,7 @@ export async function submitContactInquiryWithKey(
   payload: ContactInquiry,
   options?: SubmissionOptions
 ): Promise<{ inquiry_id: string; received: boolean }> {
-  const response = await fetch(apiUrl("/contact-inquiries"), {
-    method: "POST",
-    headers: withIdempotencyHeaders(options),
-    body: JSON.stringify(payload)
-  });
+  const response = await postJson("/contact-inquiries", payload, withIdempotencyHeaders(options));
 
   if (!response.ok) {
     const errorBody = await safeJson(response);
@@ -97,11 +116,7 @@ export async function submitDemoRequest(
   payload: DemoRequest,
   options?: SubmissionOptions
 ): Promise<{ lead_id: string; received: boolean }> {
-  const response = await fetch(apiUrl("/demo-requests"), {
-    method: "POST",
-    headers: withIdempotencyHeaders(options),
-    body: JSON.stringify(payload)
-  });
+  const response = await postJson("/demo-requests", payload, withIdempotencyHeaders(options));
 
   if (!response.ok) {
     const errorBody = await safeJson(response);
@@ -112,11 +127,7 @@ export async function submitDemoRequest(
 }
 
 export async function resolveLocation(payload: LocationResolveRequest): Promise<LocationResolveResponse> {
-  const response = await fetch(apiUrl("/location-resolve"), {
-    method: "POST",
-    headers: defaultHeaders,
-    body: JSON.stringify(payload)
-  });
+  const response = await postJson("/location-resolve", payload);
 
   if (!response.ok) {
     const errorBody = await safeJson(response);
@@ -127,11 +138,7 @@ export async function resolveLocation(payload: LocationResolveRequest): Promise<
 }
 
 export async function sendAssistantChat(payload: AssistantChatRequest): Promise<AssistantChatResponse> {
-  const response = await fetch(apiUrl("/assistant-chat"), {
-    method: "POST",
-    headers: defaultHeaders,
-    body: JSON.stringify(payload)
-  });
+  const response = await postJson("/assistant-chat", payload);
 
   if (!response.ok) {
     const errorBody = await safeJson(response);

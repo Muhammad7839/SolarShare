@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 import uvicorn
+from app.main import app
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 

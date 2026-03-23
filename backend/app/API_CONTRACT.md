@@ -10,20 +10,16 @@ Includes response header `X-Request-ID` for request tracing.
 Includes baseline security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`).
 
 GET /
-GET /app
 Description:
-Serves the integrated SolarShare web application.
-
-GET /about
-GET /methodology
-GET /pricing
-GET /contact
-Description:
-Serves additional static website pages for multi-page navigation.
+Returns backend API status only.
+Response:
+{
+  "message": "SolarShare API running"
+}
 
 GET /admin
 Description:
-Serves the static admin operations page.
+Returns protected admin API status payload.
 Requires request header `x-admin-password` matching `ADMIN_PASSWORD`.
 Returns `401` when missing or incorrect.
 
@@ -129,6 +125,7 @@ Description:
 Accepts demo requests and normalizes payload into CRM-ready lead storage.
 The lead record is persisted first as source of truth.
 Analytics forwarding runs as a best-effort side effect and does not fail the request.
+Supports optional `Idempotency-Key` request header to prevent duplicate writes.
 
 POST /contact-inquiries
 Description:
@@ -136,6 +133,7 @@ Accepts validated inquiry submissions from the contact page.
 Persists inquiries to SQLite-backed storage and is rate limited per client IP.
 Inquiry persistence is treated as source of truth.
 CRM and analytics forwarding run as best-effort side effects and do not fail the request.
+Supports optional `Idempotency-Key` request header to prevent duplicate writes.
 
 Request:
 {

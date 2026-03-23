@@ -39,6 +39,7 @@ export function SiteHeader() {
     const storageKey = "solarshare_visual_mode";
     window.localStorage.setItem(storageKey, visualMode);
     document.documentElement.classList.toggle("theme-cinematic", visualMode === "cinematic");
+    document.documentElement.classList.toggle("dark", visualMode === "cinematic");
   }, [visualMode]);
 
   useEffect(() => {

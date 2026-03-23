@@ -13,7 +13,7 @@ const flow = [
 
 export function SystemFlow() {
   return (
-    <div className="rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card">
+    <div className="rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card dark:border-slate-700 dark:bg-slate-900/70">
       <div className="grid gap-5 md:grid-cols-[repeat(4,minmax(0,1fr))] md:items-center">
         {flow.map((step, index) => {
           const Icon = step.icon;
@@ -29,8 +29,8 @@ export function SystemFlow() {
                 <Icon className="size-6" />
               </motion.div>
               <div>
-                <h3 className="mt-3 text-base font-semibold text-solarBlue-900">{step.title}</h3>
-                <p className="text-sm text-solarBlue-900/60">{step.subtitle}</p>
+                <h3 className="mt-3 text-base font-semibold text-solarBlue-900 dark:text-slate-100">{step.title}</h3>
+                <p className="text-sm text-solarBlue-900/60 dark:text-slate-300">{step.subtitle}</p>
               </div>
               {index < flow.length - 1 ? (
                 <ArrowRight className="hidden size-5 text-solarBlue-500 md:mx-auto md:mt-3 md:block" />

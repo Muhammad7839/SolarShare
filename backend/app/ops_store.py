@@ -15,7 +15,8 @@ DEFAULT_OPS_DB_PATH = str(Path(__file__).resolve().parents[1] / "ops_analytics.s
 
 def _db_path() -> str:
     """Resolve operations database path from env with local default."""
-    return os.getenv("SOLAR_SHARE_OPS_DB_PATH", DEFAULT_OPS_DB_PATH)
+    configured_path = (os.getenv("SOLAR_SHARE_OPS_DB_PATH") or "").strip()
+    return configured_path or DEFAULT_OPS_DB_PATH
 
 
 def _ensure_parent_directory(path: str) -> None:

@@ -142,11 +142,10 @@ def test_live_comparison_zip_resolution_returns_location_details() -> None:
     assert context["city"]
 
 
-def test_site_pages_are_served() -> None:
-    for route in ["/", "/about", "/methodology", "/pricing", "/contact"]:
-        response = client.get(route)
-        assert response.status_code == 200
-        assert "text/html" in response.headers.get("content-type", "")
+def test_root_returns_api_status_json() -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "SolarShare API running"}
 
 
 def test_admin_routes_require_password_header(monkeypatch) -> None:
@@ -176,12 +175,12 @@ def test_admin_routes_accept_valid_password_header(monkeypatch) -> None:
     admin_page = client.get("/admin", headers=headers)
     admin_summary = client.get("/admin/analytics", headers=headers)
     assert admin_page.status_code == 200
-    assert "text/html" in admin_page.headers.get("content-type", "")
+    assert admin_page.json()["message"] == "Admin API access granted"
     assert admin_summary.status_code == 200
     assert "totals" in admin_summary.json()
 
 
-def test_admin_static_html_is_not_publicly_accessible(monkeypatch) -> None:
+def test_backend_static_route_is_not_exposed(monkeypatch) -> None:
     monkeypatch.setenv("ADMIN_PASSWORD", "secret_admin_pw")
     assert client.get("/static/admin.html").status_code == 404
     assert client.get("/static/admin.html", headers={"x-admin-password": "secret_admin_pw"}).status_code == 404

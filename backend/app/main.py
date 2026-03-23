@@ -15,8 +15,6 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.assistant_service import build_assistant_reply
 from app.contact_store import init_contact_store, insert_contact_inquiry
@@ -83,8 +81,6 @@ ADMIN_PASSWORD_HEADER = "x-admin-password"
 TRUST_PROXY_HEADERS = os.getenv("SOLAR_SHARE_TRUST_PROXY_HEADERS", "0") == "1"
 _RATE_LIMIT_BUCKETS: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 _RATE_LIMIT_LOCK = threading.Lock()
-STATIC_DIR = Path(__file__).resolve().parent / "static"
-PRIVATE_STATIC_DIR = Path(__file__).resolve().parent / "private_static"
 _IDEMPOTENCY_CACHE: Dict[Tuple[str, str], Tuple[float, Dict[str, Any]]] = {}
 _IDEMPOTENCY_KEY_LOCKS: Dict[Tuple[str, str], threading.Lock] = {}
 _IDEMPOTENCY_LOCK = threading.Lock()
@@ -99,15 +95,22 @@ def _get_cors_origins() -> List[str]:
     return [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
     ]
+
+
+def _get_cors_origin_regex() -> Optional[str]:
+    """Read optional CORS regex from env, with LAN-safe local default."""
+    configured_regex = (os.getenv("SOLAR_SHARE_CORS_ORIGIN_REGEX") or "").strip()
+    if configured_regex:
+        return configured_regex
+    return r"^https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$"
 
 
 # CORS: allow frontend apps to talk to this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_get_cors_origins(),
+    allow_origin_regex=_get_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -262,50 +265,17 @@ def health_check():
     }
 
 
-# Serve the web frontend from the backend for a single deployable app.
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-
-def _serve_page(filename: str):
-    """Return a static HTML page from app/static by filename."""
-    return FileResponse(str(STATIC_DIR / filename))
-
-
-def _serve_private_page(filename: str):
-    """Return an auth-gated static HTML page from app/private_static by filename."""
-    return FileResponse(str(PRIVATE_STATIC_DIR / filename))
-
-
 @app.get("/")
-@app.get("/app")
-def web_app():
-    return _serve_page("index.html")
-
-
-@app.get("/about")
-def about_page():
-    return _serve_page("about.html")
-
-
-@app.get("/methodology")
-def methodology_page():
-    return _serve_page("methodology.html")
-
-
-@app.get("/pricing")
-def pricing_page():
-    return _serve_page("pricing.html")
-
-
-@app.get("/contact")
-def contact_page():
-    return _serve_page("contact.html")
+def root_status():
+    """Backend root endpoint intentionally returns API status only."""
+    return {"message": "SolarShare API running"}
 
 
 @app.get("/admin")
 def admin_page(request: Request):
+    """Protected admin status endpoint for operations tooling."""
     _require_admin_access(request)
-    return _serve_private_page("admin.html")
+    return {"message": "Admin API access granted", "analytics_path": "/admin/analytics"}
 
 
 @app.post("/options", response_model=List[ScoredOptionSchema])

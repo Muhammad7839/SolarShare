@@ -1,47 +1,50 @@
 <!-- Deployment runbook for production split hosting: Vercel frontend + Render backend. -->
-# SolarShare Deployment Runbook (Vercel + Render)
+# SolarShare Deployment Runbook (Render + Vercel)
 
-This repository is set up for a split deployment:
-
-- Frontend (Next.js): Vercel
+This project is deployed as:
 - Backend (FastAPI): Render
+- Frontend (Next.js): Vercel
 
-## 1) Deploy backend to Render
+## 1) Backend deployment on Render
 
-1. Push your branch to GitHub.
-2. In Render, create a new **Blueprint** service from this repo.
-3. Confirm Render picks up [`render.yaml`](/Users/muhammad/Development/SolarShare/render.yaml).
-4. Deploy, then copy backend URL (example: `https://solarshare-api.onrender.com`).
+Use these exact values:
+- Root Directory: `backend`
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port 10000 --proxy-headers`
+- Health Check Path: `/health`
 
-## 2) Deploy frontend to Vercel
+Required backend environment variable:
+- `SOLAR_SHARE_CORS_ORIGINS=https://<your-vercel-domain>,http://localhost:3000,http://127.0.0.1:3000`
 
-1. Import the same repo in Vercel.
-2. Set **Root Directory** to `frontend`.
-3. Add environment variable:
-   - `NEXT_PUBLIC_API_BASE_URL=https://solarshare-api.onrender.com`
-4. Deploy and copy frontend URL (example: `https://solarshare-web.vercel.app`).
+Optional but recommended:
+- `ADMIN_PASSWORD=<secure-value>`
 
-## 3) Set backend CORS for frontend domain
+## 2) Frontend deployment on Vercel
 
-In Render service environment variables, set:
+Use these exact values:
+- Root Directory: `frontend`
+- Framework Preset: Next.js
 
-`SOLAR_SHARE_CORS_ORIGINS=https://solarshare-web.vercel.app,http://localhost:3000,http://127.0.0.1:3000`
+Required frontend environment variable:
+- `NEXT_PUBLIC_API_BASE_URL=https://<your-render-backend-domain>`
 
-Replace `solarshare-web.vercel.app` with your real Vercel domain.
+## 3) Post-deploy smoke tests
 
-## 4) Smoke test checklist
-
-1. Open frontend home page and verify navigation/animations.
-2. Open Product page and submit a comparison.
-3. Open Contact page and submit a test inquiry.
-4. Verify backend health endpoint:
-   - `GET https://solarshare-api.onrender.com/health`
+1. Open frontend URL and confirm home page loads.
+2. Run product flow and verify comparison request succeeds.
+3. Verify backend health endpoint:
+   - `GET https://<your-render-backend-domain>/health`
+4. Verify API root endpoint:
+   - `GET https://<your-render-backend-domain>/`
 5. Confirm browser network calls succeed for:
    - `POST /live-comparison`
    - `POST /contact-inquiries`
 
-## 5) Rollback safety
+## 4) Common failure fixes
 
-1. Keep latest known-good deployment in Vercel and Render.
-2. Roll back frontend in Vercel if UI release causes regressions.
-3. Roll back backend in Render if API failures appear.
+- Render ASGI error `Attribute "app" not found in module "main"`:
+  - Use `app.main:app` in the start command.
+- Frontend `Failed to fetch`:
+  - Confirm `NEXT_PUBLIC_API_BASE_URL` points to the live Render backend.
+- CORS errors:
+  - Add the Vercel domain to `SOLAR_SHARE_CORS_ORIGINS` on Render.

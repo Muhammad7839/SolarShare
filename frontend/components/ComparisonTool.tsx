@@ -16,7 +16,7 @@ export function ComparisonTool() {
   const [step, setStep] = useState(1);
   const [location, setLocation] = useState("");
   const [zipCode, setZipCode] = useState("");
-  const [usage, setUsage] = useState(650);
+  const [usageInput, setUsageInput] = useState("650");
   const [priority, setPriority] = useState<PriorityMode>("balanced");
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -35,6 +35,18 @@ export function ComparisonTool() {
     }));
   }, [result]);
 
+  function usageValue(): number | null {
+    const trimmed = usageInput.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+    return parsed;
+  }
+
   function validateStep(stepNumber: number): boolean {
     const safeLocation = location.trim();
     const safeZip = zipCode.trim();
@@ -51,7 +63,8 @@ export function ComparisonTool() {
     }
 
     if (stepNumber === 2) {
-      if (!Number.isFinite(usage) || usage <= 0) {
+      const parsedUsage = usageValue();
+      if (parsedUsage === null || parsedUsage <= 0) {
         setError("Monthly usage must be a number greater than 0.");
         return false;
       }
@@ -90,10 +103,15 @@ export function ComparisonTool() {
     setError(null);
 
     try {
+      const parsedUsage = usageValue();
+      if (parsedUsage === null) {
+        setError("Monthly usage must be a number greater than 0.");
+        return;
+      }
       const payload = await fetchLiveComparison({
         location: location.trim(),
         zip_code: zipCode.trim() || null,
-        monthly_usage_kwh: usage,
+        monthly_usage_kwh: parsedUsage,
         priority
       });
       setResult(payload);
@@ -106,10 +124,10 @@ export function ComparisonTool() {
   }
 
   return (
-    <section className="rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card" id="comparison-tool">
+    <section className="rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card dark:border-slate-700 dark:bg-slate-900/70" id="comparison-tool">
       <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-solarBlue-100 bg-solarBlue-50/60 p-5">
-          <h3 className="text-xl font-semibold text-solarBlue-900">Start Comparison</h3>
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-solarBlue-100 bg-solarBlue-50/60 p-5 dark:border-slate-700 dark:bg-slate-800/70">
+          <h3 className="text-xl font-semibold text-solarBlue-900 dark:text-slate-100">Start Comparison</h3>
           <div className="comparison-stepper">
             <span className={step === 1 ? "active" : step > 1 ? "done" : ""}>1. Location</span>
             <span className={step === 2 ? "active" : step > 2 ? "done" : ""}>2. Usage</span>
@@ -118,23 +136,23 @@ export function ComparisonTool() {
 
           {step === 1 ? (
             <>
-              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80 dark:text-slate-200">
                 Location (city, state)
                 <input
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}
                   placeholder="Example: New York, NY"
-                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-600"
                 />
               </label>
 
-              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80 dark:text-slate-200">
                 ZIP Code
                 <input
                   value={zipCode}
                   onChange={(event) => setZipCode(event.target.value)}
                   placeholder="11757"
-                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-600"
                 />
               </label>
 
@@ -144,13 +162,13 @@ export function ComparisonTool() {
                   void previewResolvedLocation();
                 }}
                 disabled={previewLoading}
-                className="w-full rounded-xl border border-solarBlue-200 bg-white px-4 py-3 text-sm font-semibold text-solarBlue-700 transition hover:bg-solarBlue-50 disabled:cursor-not-allowed disabled:opacity-70"
+                className="w-full rounded-xl border border-solarBlue-200 bg-white px-4 py-3 text-sm font-semibold text-solarBlue-700 transition hover:bg-solarBlue-50 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 {previewLoading ? "Resolving Location..." : "Preview Location"}
               </button>
 
               {locationPreview ? (
-                <article className="rounded-xl border border-energyGreen-200 bg-energyGreen-100/70 p-3 text-sm text-solarBlue-900">
+                <article className="rounded-xl border border-energyGreen-200 bg-energyGreen-100/70 p-3 text-sm text-solarBlue-900 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-100">
                   <p className="font-semibold">Resolved: {locationPreview.resolved_location}</p>
                   <p className="mt-1">
                     {locationPreview.city || "City n/a"}, {locationPreview.county || "County n/a"}, {locationPreview.state_code || "State n/a"}{" "}
@@ -179,25 +197,25 @@ export function ComparisonTool() {
 
           {step === 2 ? (
             <>
-              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80 dark:text-slate-200">
                 Monthly Usage (kWh)
                 <input
                   type="number"
                   min={1}
                   step={1}
-                  value={usage}
-                  onChange={(event) => setUsage(Number(event.target.value))}
+                  value={usageInput}
+                  onChange={(event) => setUsageInput(event.target.value)}
                   required
-                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-600"
                 />
               </label>
 
-              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80">
+              <label className="grid gap-2 text-sm font-semibold text-solarBlue-900/80 dark:text-slate-200">
                 Priority
                 <select
                   value={priority}
                   onChange={(event) => setPriority(event.target.value as PriorityMode)}
-                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring"
+                  className="rounded-xl border border-solarBlue-100 bg-white px-4 py-3 text-solarBlue-900 outline-none ring-solarBlue-200 focus:ring dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-600"
                 >
                   {priorities.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -232,7 +250,7 @@ export function ComparisonTool() {
 
           {step === 3 ? (
             <>
-              <article className="rounded-xl border border-solarBlue-100 bg-white p-3 text-sm text-solarBlue-900/75">
+              <article className="rounded-xl border border-solarBlue-100 bg-white p-3 text-sm text-solarBlue-900/75 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200">
                 <p>
                   Location: <strong>{location.trim() || "Not provided"}</strong>
                 </p>
@@ -240,7 +258,7 @@ export function ComparisonTool() {
                   ZIP: <strong>{zipCode.trim() || "Not provided"}</strong>
                 </p>
                 <p>
-                  Usage: <strong>{usage} kWh</strong>
+                  Usage: <strong>{usageInput.trim() ? `${usageInput.trim()} kWh` : "Not provided"}</strong>
                 </p>
                 <p>
                   Priority: <strong>{priorities.find((item) => item.value === priority)?.label || priority}</strong>
@@ -266,16 +284,16 @@ export function ComparisonTool() {
             </>
           ) : null}
 
-          {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">{error}</p> : null}
+          {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 dark:bg-red-950/50 dark:text-red-200">{error}</p> : null}
         </form>
 
         <div className="space-y-4">
-          <article className="rounded-2xl border border-solarBlue-100 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Top Recommendation</p>
-            <h4 className="mt-2 text-xl font-semibold text-solarBlue-900">
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Top Recommendation</p>
+            <h4 className="mt-2 text-xl font-semibold text-solarBlue-900 dark:text-slate-100">
               {recommendation ? recommendation.option.provider_name : "Run a scenario to see your best fit"}
             </h4>
-            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75">
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
               <p>
                 Monthly Cost: <strong className="metric-value">{recommendation ? `$${recommendation.monthly_cost.toFixed(2)}` : "-"}</strong>
               </p>
@@ -292,31 +310,31 @@ export function ComparisonTool() {
             </div>
           </article>
 
-          <article className="rounded-2xl border border-solarBlue-100 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Savings by Option</p>
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Savings by Option</p>
             <div className="mt-4 space-y-3">
               {chartData.length ? (
                 chartData.map((row) => (
                   <div key={row.name} className="grid grid-cols-[120px_1fr_auto] items-center gap-3">
-                    <span className="truncate text-xs font-semibold text-solarBlue-900/70">{row.name}</span>
-                    <div className="h-2 rounded-full bg-solarBlue-50">
+                    <span className="truncate text-xs font-semibold text-solarBlue-900/70 dark:text-slate-200">{row.name}</span>
+                    <div className="h-2 rounded-full bg-solarBlue-50 dark:bg-slate-800">
                       <div
                         className="h-2 rounded-full bg-gradient-to-r from-solarBlue-500 to-energyGreen-500"
                         style={{ width: `${Math.min((row.savings / 120) * 100, 100)}%` }}
                       />
                     </div>
-                    <span className="metric-value metric-accent-green text-xs font-bold text-solarBlue-900">${row.savings.toFixed(0)}</span>
+                    <span className="metric-value metric-accent-green text-xs font-bold text-solarBlue-900 dark:text-emerald-300">${row.savings.toFixed(0)}</span>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-solarBlue-900/60">No chart yet. Run the tool to populate.</p>
+                <p className="text-sm text-solarBlue-900/60 dark:text-slate-300">No chart yet. Run the tool to populate.</p>
               )}
             </div>
           </article>
 
-          <article className="rounded-2xl border border-solarBlue-100 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Live Data Context</p>
-            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75">
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Live Data Context</p>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
               <p>Location: {result?.market_context.resolved_location || "-"}</p>
               <p>
                 Region: {result?.market_context.city || "-"}, {result?.market_context.county || "-"}, {result?.market_context.state_code || "-"}{" "}
@@ -329,9 +347,9 @@ export function ComparisonTool() {
             </div>
           </article>
 
-          <article className="rounded-2xl border border-solarBlue-100 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Why this recommendation</p>
-            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75">
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Why this recommendation</p>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
               <p>Price contribution: {result ? `${Math.round((result.factor_breakdown?.price || 0) * 100)}%` : "-"}</p>
               <p>
                 Reliability contribution: {result ? `${Math.round((result.factor_breakdown?.reliability || 0) * 100)}%` : "-"}

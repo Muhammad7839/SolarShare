@@ -4,9 +4,9 @@ import { SlidersHorizontal, Sparkles, TrendingUp } from "lucide-react";
 export function ProductPreview() {
   return (
     <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-      <div className="tilt-card rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card transition-transform duration-500 hover:-translate-y-1 hover:rotate-[0.35deg]">
+      <div className="tilt-card rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card transition-transform duration-500 hover:-translate-y-1 hover:rotate-[0.35deg] dark:border-slate-700 dark:bg-slate-900/70">
         <div className="flex items-center justify-between">
-          <h3 className="text-xl font-semibold text-solarBlue-900">Decision Score Dashboard</h3>
+          <h3 className="text-xl font-semibold text-solarBlue-900 dark:text-slate-100">Decision Score Dashboard</h3>
           <span className="rounded-full bg-energyGreen-100 px-3 py-1 text-xs font-bold text-energyGreen-700">Live Mode</span>
         </div>
 
@@ -25,16 +25,16 @@ export function ProductPreview() {
           </article>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-solarBlue-100 p-4">
+        <div className="mt-6 rounded-2xl border border-solarBlue-100 p-4 dark:border-slate-700 dark:bg-slate-900/50">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold text-solarBlue-900">Monthly Savings Projection</p>
+            <p className="text-sm font-semibold text-solarBlue-900 dark:text-slate-100">Monthly Savings Projection</p>
             <TrendingUp className="size-4 text-energyGreen-700" />
           </div>
           <div className="space-y-3">
             {[28, 35, 42, 54, 63, 71].map((value, index) => (
               <div key={value} className="grid grid-cols-[44px_1fr] items-center gap-3">
-                <span className="text-xs font-semibold text-solarBlue-900/60">M{index + 1}</span>
-                <div className="h-2 rounded-full bg-solarBlue-50">
+                <span className="text-xs font-semibold text-solarBlue-900/60 dark:text-slate-300">M{index + 1}</span>
+                <div className="h-2 rounded-full bg-solarBlue-50 dark:bg-slate-800">
                   <div className="h-2 rounded-full bg-gradient-to-r from-solarBlue-500 to-energyGreen-500" style={{ width: `${value}%` }} />
                 </div>
               </div>
@@ -44,23 +44,23 @@ export function ProductPreview() {
       </div>
 
       <div className="grid gap-6">
-        <article className="tilt-card rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card transition-transform duration-500 hover:-translate-y-1 hover:-rotate-[0.35deg]">
+        <article className="tilt-card rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card transition-transform duration-500 hover:-translate-y-1 hover:-rotate-[0.35deg] dark:border-slate-700 dark:bg-slate-900/70">
           <div className="flex items-center gap-2 text-solarBlue-700">
             <SlidersHorizontal className="size-5" />
             <p className="text-sm font-bold uppercase tracking-[0.14em]">Comparison Interface</p>
           </div>
           <div className="mt-4 space-y-3">
-            <div className="rounded-xl border border-solarBlue-100 p-3">
-              <p className="text-sm font-semibold text-solarBlue-900">Long Island Community Solar</p>
-              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-solarBlue-900/60">
+            <div className="rounded-xl border border-solarBlue-100 p-3 dark:border-slate-700">
+              <p className="text-sm font-semibold text-solarBlue-900 dark:text-slate-100">Long Island Community Solar</p>
+              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-solarBlue-900/60 dark:text-slate-300">
                 <li>$112/month</li>
                 <li>93% reliability</li>
                 <li>9.8 miles</li>
               </ul>
             </div>
-            <div className="rounded-xl border border-solarBlue-100 p-3">
-              <p className="text-sm font-semibold text-solarBlue-900">Northeast Shared Solar</p>
-              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-solarBlue-900/60">
+            <div className="rounded-xl border border-solarBlue-100 p-3 dark:border-slate-700">
+              <p className="text-sm font-semibold text-solarBlue-900 dark:text-slate-100">Northeast Shared Solar</p>
+              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-solarBlue-900/60 dark:text-slate-300">
                 <li>$118/month</li>
                 <li>90% reliability</li>
                 <li>14.2 miles</li>
@@ -69,14 +69,14 @@ export function ProductPreview() {
           </div>
         </article>
 
-        <article className="tilt-card rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card transition-transform duration-500 hover:-translate-y-1 hover:rotate-[0.35deg]">
+        <article className="tilt-card rounded-3xl border border-solarBlue-100 bg-white p-6 shadow-card transition-transform duration-500 hover:-translate-y-1 hover:rotate-[0.35deg] dark:border-slate-700 dark:bg-slate-900/70">
           <div className="flex items-center gap-2 text-energyGreen-700">
             <Sparkles className="size-5" />
             <p className="text-sm font-bold uppercase tracking-[0.14em]">Savings Calculator</p>
           </div>
           <p className="metric-value metric-accent-green mt-3 text-2xl font-semibold text-solarBlue-900">$740/year estimated savings</p>
           <input type="range" min="1" max="10" value="6" readOnly className="mt-5 w-full accent-energyGreen-500" />
-          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-solarBlue-900/60">Projection confidence: high</p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Projection confidence: high</p>
         </article>
       </div>
     </section>

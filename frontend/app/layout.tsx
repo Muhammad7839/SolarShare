@@ -23,7 +23,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var mode=localStorage.getItem('solarshare_visual_mode');if(mode==='cinematic'){document.documentElement.classList.add('theme-cinematic');}}catch(e){}})();"
+              "(function(){try{var mode=localStorage.getItem('solarshare_visual_mode');if(mode==='cinematic'){document.documentElement.classList.add('theme-cinematic');document.documentElement.classList.add('dark');}}catch(e){}})();"
           }}
         />
       </head>

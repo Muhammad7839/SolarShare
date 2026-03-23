@@ -13,7 +13,8 @@ DEFAULT_CONTACT_DB_PATH = str(Path(__file__).resolve().parents[1] / "contact_inq
 
 def _db_path() -> str:
     """Resolve contact database path from env with a sensible local default."""
-    return os.getenv("SOLAR_SHARE_CONTACT_DB_PATH", DEFAULT_CONTACT_DB_PATH)
+    configured_path = (os.getenv("SOLAR_SHARE_CONTACT_DB_PATH") or "").strip()
+    return configured_path or DEFAULT_CONTACT_DB_PATH
 
 
 def _ensure_parent_directory(path: str) -> None:
