@@ -38,6 +38,7 @@ MONTH_ORDER = {
 }
 
 INVOICE_STATUSES = {"draft", "issued", "paid", "failed"}
+STATUS_REQUEST_STATES = {"pending", "approved", "rejected", "cancelled"}
 
 
 def _db_path() -> str:
@@ -86,20 +87,32 @@ def _build_invoice_pdf_bytes(
     savings: float,
     billing_status: str,
 ) -> bytes:
-    """Build a compact invoice PDF artifact stored in DB for authenticated download."""
+    """Build branded invoice PDF artifact with customer-facing line-item breakdown."""
 
     def _pdf_escape(value: str) -> str:
         return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
     lines = [
-        "SolarShare Monthly Invoice",
+        "SolarShare Community Solar Invoice",
+        "No upfront cost | Cancel anytime | No installation required",
+        "",
         f"Invoice ID: {invoice_id}",
-        f"Month: {month_label}",
-        f"Status: {billing_status}",
-        f"Utility credits: ${utility_credits:.2f}",
-        f"Payment due: ${payment_due:.2f}",
-        f"Savings: ${savings:.2f}",
-        "Billing flow: Solar generation -> Utility credit -> Discounted payment",
+        f"Billing Month: {month_label}",
+        f"Invoice Status: {billing_status.upper()}",
+        "Region: New York Community Solar Program",
+        "",
+        "Line Items",
+        f"1) Utility Bill Credits Applied ......... ${utility_credits:.2f}",
+        f"2) SolarShare Subscription Payment ...... ${payment_due:.2f}",
+        f"3) Net Customer Savings ................. ${savings:.2f}",
+        "",
+        "Billing Explanation",
+        "Step 1: Solar projects generate bill credits.",
+        "Step 2: Utility applies credits to your account.",
+        "Step 3: You pay SolarShare a discounted amount.",
+        "",
+        "Payment Support",
+        "For billing questions contact billing@solarshare.com",
     ]
     stream_lines = ["BT", "/F1 12 Tf", "72 760 Td"]
     for index, line in enumerate(lines):
@@ -153,6 +166,24 @@ def init_project_store() -> None:
                 role TEXT NOT NULL DEFAULT 'customer',
                 created_at TEXT NOT NULL,
                 last_login_at TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                refresh_token_hash TEXT NOT NULL,
+                device_name TEXT,
+                user_agent TEXT,
+                ip_address TEXT,
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                revoked_at TEXT,
+                revoked_reason TEXT,
+                FOREIGN KEY(user_id) REFERENCES users(id)
             )
             """
         )
@@ -219,11 +250,32 @@ def init_project_store() -> None:
                 rollover_balance_kwh REAL NOT NULL,
                 explanation TEXT NOT NULL,
                 pdf_blob BLOB NOT NULL,
+                payment_provider TEXT,
+                payment_transaction_id TEXT,
+                payment_status_message TEXT,
                 created_at TEXT NOT NULL,
                 issued_at TEXT,
                 paid_at TEXT,
                 failed_at TEXT,
                 UNIQUE(subscription_id, month_label)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS invoice_status_requests (
+                id TEXT PRIMARY KEY,
+                invoice_id TEXT NOT NULL,
+                requested_by_user_id TEXT NOT NULL,
+                current_status TEXT NOT NULL,
+                requested_status TEXT NOT NULL,
+                reason TEXT,
+                state TEXT NOT NULL DEFAULT 'pending',
+                reviewed_by_user_id TEXT,
+                review_note TEXT,
+                created_at TEXT NOT NULL,
+                reviewed_at TEXT,
+                FOREIGN KEY(invoice_id) REFERENCES invoices(id)
             )
             """
         )
@@ -244,6 +296,12 @@ def init_project_store() -> None:
         _ensure_column(connection, "subscriptions", "user_id", "TEXT")
         _ensure_column(connection, "credit_ledger", "billing_status", "TEXT NOT NULL DEFAULT 'issued'")
         _ensure_column(connection, "credit_ledger", "invoice_id", "TEXT")
+        _ensure_column(connection, "invoices", "payment_provider", "TEXT")
+        _ensure_column(connection, "invoices", "payment_transaction_id", "TEXT")
+        _ensure_column(connection, "invoices", "payment_status_message", "TEXT")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_refresh_hash ON auth_sessions(refresh_token_hash)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_invoice_status_requests_state ON invoice_status_requests(state)")
 
         existing = connection.execute("SELECT COUNT(*) AS count FROM solar_projects").fetchone()["count"]
         if int(existing) == 0:
@@ -366,6 +424,233 @@ def mark_user_login(user_id: str) -> None:
             (datetime.now(timezone.utc).isoformat(), normalized),
         )
         connection.commit()
+
+
+def create_auth_session(
+    user_id: str,
+    refresh_token_hash: str,
+    expires_at: str,
+    device_name: Optional[str],
+    user_agent: Optional[str],
+    ip_address: Optional[str],
+) -> Dict[str, Any]:
+    """Persist login session metadata used for refresh and revocation controls."""
+    init_project_store()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    session_id = uuid4().hex
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.execute(
+            """
+            INSERT INTO auth_sessions
+            (id, user_id, refresh_token_hash, device_name, user_agent, ip_address, created_at, last_seen_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                user_id.strip(),
+                refresh_token_hash.strip(),
+                (device_name or "").strip() or None,
+                (user_agent or "").strip() or None,
+                (ip_address or "").strip() or None,
+                now_iso,
+                now_iso,
+                expires_at.strip(),
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            """
+            SELECT id, user_id, device_name, user_agent, ip_address, created_at, last_seen_at, expires_at, revoked_at, revoked_reason
+            FROM auth_sessions
+            WHERE id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+    return _row_to_dict(row)
+
+
+def get_auth_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Return auth session record by ID."""
+    normalized = (session_id or "").strip()
+    if not normalized:
+        return None
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT id, user_id, refresh_token_hash, device_name, user_agent, ip_address, created_at, last_seen_at, expires_at, revoked_at, revoked_reason
+            FROM auth_sessions
+            WHERE id = ?
+            """,
+            (normalized,),
+        ).fetchone()
+    return _row_to_dict(row) if row else None
+
+
+def get_auth_session_by_refresh_hash(refresh_token_hash: str) -> Optional[Dict[str, Any]]:
+    """Resolve session by refresh token hash for token rotation."""
+    normalized = (refresh_token_hash or "").strip()
+    if not normalized:
+        return None
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT id, user_id, refresh_token_hash, device_name, user_agent, ip_address, created_at, last_seen_at, expires_at, revoked_at, revoked_reason
+            FROM auth_sessions
+            WHERE refresh_token_hash = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (normalized,),
+        ).fetchone()
+    return _row_to_dict(row) if row else None
+
+
+def touch_auth_session(session_id: str) -> None:
+    """Update session last-seen timestamp after successful authenticated use."""
+    normalized = (session_id or "").strip()
+    if not normalized:
+        return
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.execute(
+            """
+            UPDATE auth_sessions
+            SET last_seen_at = ?
+            WHERE id = ?
+            """,
+            (datetime.now(timezone.utc).isoformat(), normalized),
+        )
+        connection.commit()
+
+
+def rotate_auth_session(session_id: str, refresh_token_hash: str, expires_at: str) -> bool:
+    """Rotate session refresh hash and extend expiry during refresh flows."""
+    normalized_id = (session_id or "").strip()
+    normalized_hash = (refresh_token_hash or "").strip()
+    normalized_expires_at = (expires_at or "").strip()
+    if not normalized_id or not normalized_hash or not normalized_expires_at:
+        return False
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE auth_sessions
+            SET refresh_token_hash = ?, expires_at = ?, last_seen_at = ?
+            WHERE id = ? AND revoked_at IS NULL
+            """,
+            (
+                normalized_hash,
+                normalized_expires_at,
+                datetime.now(timezone.utc).isoformat(),
+                normalized_id,
+            ),
+        )
+        connection.commit()
+    return cursor.rowcount > 0
+
+
+def revoke_auth_session(session_id: str, reason: str = "logout") -> bool:
+    """Revoke one session so future access/refresh checks fail."""
+    normalized_id = (session_id or "").strip()
+    if not normalized_id:
+        return False
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE auth_sessions
+            SET revoked_at = COALESCE(revoked_at, ?), revoked_reason = COALESCE(revoked_reason, ?)
+            WHERE id = ?
+            """,
+            (
+                datetime.now(timezone.utc).isoformat(),
+                (reason or "").strip() or "logout",
+                normalized_id,
+            ),
+        )
+        connection.commit()
+    return cursor.rowcount > 0
+
+
+def revoke_other_auth_sessions(user_id: str, keep_session_id: Optional[str]) -> int:
+    """Revoke all other sessions for a user to support account-wide sign-out."""
+    normalized_user_id = (user_id or "").strip()
+    keep_id = (keep_session_id or "").strip()
+    if not normalized_user_id:
+        return 0
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        if keep_id:
+            cursor = connection.execute(
+                """
+                UPDATE auth_sessions
+                SET revoked_at = COALESCE(revoked_at, ?), revoked_reason = COALESCE(revoked_reason, 'logout_all')
+                WHERE user_id = ? AND id != ? AND revoked_at IS NULL
+                """,
+                (datetime.now(timezone.utc).isoformat(), normalized_user_id, keep_id),
+            )
+        else:
+            cursor = connection.execute(
+                """
+                UPDATE auth_sessions
+                SET revoked_at = COALESCE(revoked_at, ?), revoked_reason = COALESCE(revoked_reason, 'logout_all')
+                WHERE user_id = ? AND revoked_at IS NULL
+                """,
+                (datetime.now(timezone.utc).isoformat(), normalized_user_id),
+            )
+        connection.commit()
+    return int(cursor.rowcount)
+
+
+def list_auth_sessions_for_user(user_id: str) -> List[Dict[str, Any]]:
+    """List a user's sessions for device/session controls in dashboard settings."""
+    normalized_user_id = (user_id or "").strip()
+    if not normalized_user_id:
+        return []
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT id, user_id, device_name, user_agent, ip_address, created_at, last_seen_at, expires_at, revoked_at, revoked_reason
+            FROM auth_sessions
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            """,
+            (normalized_user_id,),
+        ).fetchall()
+    sessions = [_row_to_dict(row) for row in rows]
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for session in sessions:
+        session["is_active"] = bool(not session.get("revoked_at") and str(session.get("expires_at") or "") > now_iso)
+    return sessions
+
+
+def update_user_role(user_id: str, role: str) -> bool:
+    """Update user role for RBAC bootstrap and admin management flows."""
+    normalized_user_id = (user_id or "").strip()
+    normalized_role = (role or "").strip().lower()
+    if normalized_role not in {"customer", "developer", "admin"}:
+        return False
+    if not normalized_user_id:
+        return False
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE users
+            SET role = ?
+            WHERE id = ?
+            """,
+            (normalized_role, normalized_user_id),
+        )
+        connection.commit()
+    return cursor.rowcount > 0
 
 
 def get_subscription_for_user(user_key: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -692,6 +977,9 @@ def _load_billing_history(subscription_id: str) -> list[dict[str, Any]]:
                 i.savings,
                 i.rollover_balance_kwh,
                 i.explanation,
+                i.payment_provider,
+                i.payment_transaction_id,
+                i.payment_status_message,
                 i.created_at,
                 i.issued_at,
                 i.paid_at,
@@ -712,6 +1000,9 @@ def _load_billing_history(subscription_id: str) -> list[dict[str, Any]]:
             "savings": float(row["savings"]),
             "rollover_balance": float(row["rollover_balance_kwh"]),
             "explanation": row["explanation"],
+            "payment_provider": row["payment_provider"],
+            "payment_transaction_id": row["payment_transaction_id"],
+            "payment_status_message": row["payment_status_message"],
             "created_at": row["created_at"],
             "issued_at": row["issued_at"],
             "paid_at": row["paid_at"],
@@ -738,6 +1029,49 @@ def list_billing_history_for_user_id(user_id: Optional[str]) -> list[dict[str, A
     if not subscription:
         return []
     return _load_billing_history(str(subscription["id"]))
+
+
+def get_invoice_for_user(user_key: Optional[str], invoice_id: str) -> Optional[Dict[str, Any]]:
+    """Return invoice metadata for a user-scoped invoice access check."""
+    normalized_invoice_id = (invoice_id or "").strip()
+    normalized_user_key = (user_key or "").strip()
+    if not normalized_invoice_id or not normalized_user_key:
+        return None
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT
+                i.id,
+                i.subscription_id,
+                i.month_label,
+                i.status,
+                i.billing_status,
+                i.utility_credits,
+                i.payment_due,
+                i.savings,
+                i.rollover_balance_kwh,
+                i.explanation,
+                i.payment_provider,
+                i.payment_transaction_id,
+                i.payment_status_message,
+                i.created_at
+            FROM invoices i
+            JOIN subscriptions s ON s.id = i.subscription_id
+            WHERE i.id = ? AND s.user_key = ?
+            """,
+            (normalized_invoice_id, normalized_user_key),
+        ).fetchone()
+    return _row_to_dict(row) if row else None
+
+
+def get_invoice_for_user_id(user_id: Optional[str], invoice_id: str) -> Optional[Dict[str, Any]]:
+    """Return invoice metadata for authenticated user access checks."""
+    normalized_user_id = (user_id or "").strip()
+    if not normalized_user_id:
+        return None
+    return get_invoice_for_user(auth_identity_user_key(normalized_user_id), invoice_id=invoice_id)
 
 
 def get_invoice_pdf_for_user(user_key: Optional[str], invoice_id: str) -> Optional[Dict[str, Any]]:
@@ -777,74 +1111,314 @@ def get_invoice_pdf_for_user_id(user_id: Optional[str], invoice_id: str) -> Opti
     return get_invoice_pdf_for_user(auth_identity_user_key(normalized_user_id), invoice_id=invoice_id)
 
 
-def update_invoice_status_for_user(user_key: Optional[str], invoice_id: str, status: str) -> bool:
+def _update_invoice_status_by_id(
+    connection: sqlite3.Connection,
+    invoice_id: str,
+    status: str,
+    payment_provider: Optional[str] = None,
+    payment_transaction_id: Optional[str] = None,
+    payment_status_message: Optional[str] = None,
+) -> bool:
+    """Apply invoice status mutation and sync ledger row in one transaction."""
+    normalized_invoice_id = (invoice_id or "").strip()
+    normalized_status = _normalize_invoice_status(status)
+    if not normalized_invoice_id:
+        return False
+    now_iso = datetime.now(timezone.utc).isoformat()
+    connection.row_factory = sqlite3.Row
+    invoice_row = connection.execute(
+        """
+        SELECT id, subscription_id, month_label
+        FROM invoices
+        WHERE id = ?
+        """,
+        (normalized_invoice_id,),
+    ).fetchone()
+    if not invoice_row:
+        return False
+    connection.execute(
+        """
+        UPDATE invoices
+        SET
+            status = ?,
+            billing_status = ?,
+            payment_provider = COALESCE(?, payment_provider),
+            payment_transaction_id = COALESCE(?, payment_transaction_id),
+            payment_status_message = COALESCE(?, payment_status_message),
+            issued_at = CASE WHEN ? = 'issued' THEN COALESCE(issued_at, ?) ELSE issued_at END,
+            paid_at = CASE WHEN ? = 'paid' THEN COALESCE(paid_at, ?) ELSE paid_at END,
+            failed_at = CASE WHEN ? = 'failed' THEN COALESCE(failed_at, ?) ELSE failed_at END
+        WHERE id = ?
+        """,
+        (
+            normalized_status,
+            normalized_status,
+            (payment_provider or "").strip() or None,
+            (payment_transaction_id or "").strip() or None,
+            (payment_status_message or "").strip() or None,
+            normalized_status,
+            now_iso,
+            normalized_status,
+            now_iso,
+            normalized_status,
+            now_iso,
+            normalized_invoice_id,
+        ),
+    )
+    connection.execute(
+        """
+        UPDATE credit_ledger
+        SET billing_status = ?, created_at = ?
+        WHERE subscription_id = ? AND month_label = ?
+        """,
+        (
+            normalized_status,
+            now_iso,
+            invoice_row["subscription_id"],
+            invoice_row["month_label"],
+        ),
+    )
+    return True
+
+
+def update_invoice_status_for_user(
+    user_key: Optional[str],
+    invoice_id: str,
+    status: str,
+    payment_provider: Optional[str] = None,
+    payment_transaction_id: Optional[str] = None,
+    payment_status_message: Optional[str] = None,
+) -> bool:
     """Update invoice lifecycle status and sync ledger billing status for a user's invoice."""
     normalized_user_key = (user_key or "").strip()
     normalized_invoice_id = (invoice_id or "").strip()
-    normalized_status = _normalize_invoice_status(status)
     if not normalized_user_key or not normalized_invoice_id:
         return False
     init_project_store()
-    now_iso = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(_db_path()) as connection:
         connection.row_factory = sqlite3.Row
-        invoice_row = connection.execute(
+        exists = connection.execute(
             """
-            SELECT i.id, i.subscription_id, i.month_label
+            SELECT i.id
             FROM invoices i
             JOIN subscriptions s ON s.id = i.subscription_id
             WHERE i.id = ? AND s.user_key = ?
             """,
             (normalized_invoice_id, normalized_user_key),
         ).fetchone()
-        if not invoice_row:
+        if not exists:
             return False
-        connection.execute(
-            """
-            UPDATE invoices
-            SET
-                status = ?,
-                billing_status = ?,
-                issued_at = CASE WHEN ? = 'issued' THEN COALESCE(issued_at, ?) ELSE issued_at END,
-                paid_at = CASE WHEN ? = 'paid' THEN COALESCE(paid_at, ?) ELSE paid_at END,
-                failed_at = CASE WHEN ? = 'failed' THEN COALESCE(failed_at, ?) ELSE failed_at END
-            WHERE id = ?
-            """,
-            (
-                normalized_status,
-                normalized_status,
-                normalized_status,
-                now_iso,
-                normalized_status,
-                now_iso,
-                normalized_status,
-                now_iso,
-                normalized_invoice_id,
-            ),
-        )
-        connection.execute(
-            """
-            UPDATE credit_ledger
-            SET billing_status = ?, created_at = ?
-            WHERE subscription_id = ? AND month_label = ?
-            """,
-            (
-                normalized_status,
-                now_iso,
-                invoice_row["subscription_id"],
-                invoice_row["month_label"],
-            ),
+        updated = _update_invoice_status_by_id(
+            connection=connection,
+            invoice_id=normalized_invoice_id,
+            status=status,
+            payment_provider=payment_provider,
+            payment_transaction_id=payment_transaction_id,
+            payment_status_message=payment_status_message,
         )
         connection.commit()
-    return True
+        return updated
 
 
-def update_invoice_status_for_user_id(user_id: Optional[str], invoice_id: str, status: str) -> bool:
+def update_invoice_status_for_user_id(
+    user_id: Optional[str],
+    invoice_id: str,
+    status: str,
+    payment_provider: Optional[str] = None,
+    payment_transaction_id: Optional[str] = None,
+    payment_status_message: Optional[str] = None,
+) -> bool:
     """Update invoice status for authenticated users."""
     normalized_user_id = (user_id or "").strip()
     if not normalized_user_id:
         return False
-    return update_invoice_status_for_user(auth_identity_user_key(normalized_user_id), invoice_id=invoice_id, status=status)
+    return update_invoice_status_for_user(
+        auth_identity_user_key(normalized_user_id),
+        invoice_id=invoice_id,
+        status=status,
+        payment_provider=payment_provider,
+        payment_transaction_id=payment_transaction_id,
+        payment_status_message=payment_status_message,
+    )
+
+
+def update_invoice_status_as_admin(
+    invoice_id: str,
+    status: str,
+    payment_provider: Optional[str] = None,
+    payment_transaction_id: Optional[str] = None,
+    payment_status_message: Optional[str] = None,
+) -> bool:
+    """Update invoice status without user ownership checks for admin moderation."""
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        updated = _update_invoice_status_by_id(
+            connection=connection,
+            invoice_id=invoice_id,
+            status=status,
+            payment_provider=payment_provider,
+            payment_transaction_id=payment_transaction_id,
+            payment_status_message=payment_status_message,
+        )
+        connection.commit()
+    return updated
+
+
+def create_invoice_status_request(
+    user_id: str,
+    invoice_id: str,
+    requested_status: str,
+    reason: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Create a pending invoice status request for admin moderation."""
+    normalized_user_id = (user_id or "").strip()
+    normalized_invoice_id = (invoice_id or "").strip()
+    normalized_requested = _normalize_invoice_status(requested_status)
+    if not normalized_user_id or not normalized_invoice_id:
+        return None
+    request_id = uuid4().hex
+    now_iso = datetime.now(timezone.utc).isoformat()
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        invoice_row = connection.execute(
+            """
+            SELECT i.id, i.status
+            FROM invoices i
+            JOIN subscriptions s ON s.id = i.subscription_id
+            WHERE i.id = ? AND s.user_id = ?
+            """,
+            (normalized_invoice_id, normalized_user_id),
+        ).fetchone()
+        if not invoice_row:
+            return None
+        connection.execute(
+            """
+            INSERT INTO invoice_status_requests
+            (id, invoice_id, requested_by_user_id, current_status, requested_status, reason, state, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (
+                request_id,
+                normalized_invoice_id,
+                normalized_user_id,
+                str(invoice_row["status"]),
+                normalized_requested,
+                (reason or "").strip() or None,
+                now_iso,
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            """
+            SELECT id, invoice_id, requested_by_user_id, current_status, requested_status, reason, state, reviewed_by_user_id, review_note, created_at, reviewed_at
+            FROM invoice_status_requests
+            WHERE id = ?
+            """,
+            (request_id,),
+        ).fetchone()
+    return _row_to_dict(row) if row else None
+
+
+def list_invoice_status_requests(state: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List invoice status requests for admin moderation screens."""
+    normalized_state = (state or "").strip().lower()
+    init_project_store()
+    query = """
+        SELECT id, invoice_id, requested_by_user_id, current_status, requested_status, reason, state, reviewed_by_user_id, review_note, created_at, reviewed_at
+        FROM invoice_status_requests
+    """
+    params: list[Any] = []
+    if normalized_state:
+        query += " WHERE state = ?"
+        params.append(normalized_state)
+    query += " ORDER BY created_at DESC"
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(query, tuple(params)).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
+def list_invoice_status_requests_for_user(user_id: str) -> List[Dict[str, Any]]:
+    """List status requests created by one customer for dashboard visibility."""
+    normalized_user_id = (user_id or "").strip()
+    if not normalized_user_id:
+        return []
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT id, invoice_id, requested_by_user_id, current_status, requested_status, reason, state, reviewed_by_user_id, review_note, created_at, reviewed_at
+            FROM invoice_status_requests
+            WHERE requested_by_user_id = ?
+            ORDER BY created_at DESC
+            """,
+            (normalized_user_id,),
+        ).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
+def review_invoice_status_request(
+    request_id: str,
+    reviewer_user_id: str,
+    decision: str,
+    review_note: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Approve or reject a pending status request and apply mutation when approved."""
+    normalized_request_id = (request_id or "").strip()
+    normalized_reviewer = (reviewer_user_id or "").strip()
+    normalized_decision = (decision or "").strip().lower()
+    if normalized_decision not in {"approve", "reject"}:
+        return None
+    if not normalized_request_id or not normalized_reviewer:
+        return None
+    now_iso = datetime.now(timezone.utc).isoformat()
+    init_project_store()
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT id, invoice_id, requested_status, state
+            FROM invoice_status_requests
+            WHERE id = ?
+            """,
+            (normalized_request_id,),
+        ).fetchone()
+        if not row or row["state"] != "pending":
+            return None
+        new_state = "approved" if normalized_decision == "approve" else "rejected"
+        connection.execute(
+            """
+            UPDATE invoice_status_requests
+            SET state = ?, reviewed_by_user_id = ?, review_note = ?, reviewed_at = ?
+            WHERE id = ?
+            """,
+            (
+                new_state,
+                normalized_reviewer,
+                (review_note or "").strip() or None,
+                now_iso,
+                normalized_request_id,
+            ),
+        )
+        if new_state == "approved":
+            _update_invoice_status_by_id(
+                connection=connection,
+                invoice_id=str(row["invoice_id"]),
+                status=str(row["requested_status"]),
+                payment_status_message="Updated via admin moderation workflow",
+            )
+        connection.commit()
+        result = connection.execute(
+            """
+            SELECT id, invoice_id, requested_by_user_id, current_status, requested_status, reason, state, reviewed_by_user_id, review_note, created_at, reviewed_at
+            FROM invoice_status_requests
+            WHERE id = ?
+            """,
+            (normalized_request_id,),
+        ).fetchone()
+    return _row_to_dict(result) if result else None
 
 
 def load_dashboard_data(user_key: Optional[str]) -> Dict[str, Any]:
@@ -936,4 +1510,5 @@ def load_dashboard_data_for_user(user_id: Optional[str]) -> Dict[str, Any]:
     payload = load_dashboard_data(auth_identity_user_key(normalized_user_id))
     payload["user_id"] = normalized_user_id
     payload["auth_based"] = True
+    payload["status_requests"] = list_invoice_status_requests_for_user(normalized_user_id)
     return payload

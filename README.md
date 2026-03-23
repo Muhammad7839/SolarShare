@@ -161,3 +161,18 @@ Use these exact settings:
   - `GET /billing/invoices`
   - `PATCH /billing/invoices/{invoice_id}/status` (`draft|issued|paid|failed`)
   - `GET /billing/invoices/{invoice_id}/download`
+- Payment rails:
+  - `POST /billing/invoices/{invoice_id}/pay` charges through provider adapters.
+  - Default provider is `mock`; optional Stripe integration via `STRIPE_SECRET_KEY`.
+  - Payment metadata (`payment_provider`, `payment_transaction_id`, `payment_status_message`) is stored per invoice.
+- Session management:
+  - `POST /auth/refresh` rotates refresh tokens.
+  - `POST /auth/logout` revokes current session.
+  - `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `POST /auth/sessions/revoke-others` support device/session control.
+- RBAC and moderation:
+  - Roles: `customer`, `developer`, `admin`.
+  - Customer status changes create moderation requests.
+  - Admin reviews via `/admin/billing/status-requests` and `/admin/billing/status-requests/{id}/review`.
+- Utility rate refresh pipeline:
+  - `POST /admin/utility-rates/refresh` or cron-safe `POST /internal/utility-rates/refresh`
+  - refresh jobs logged in `utility_rate_refresh_jobs` with timestamps and record counts.

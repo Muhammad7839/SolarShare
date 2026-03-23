@@ -163,11 +163,27 @@ export interface DashboardDataResponse {
     savings: number;
     rollover_balance: number;
     explanation: string;
+    payment_provider?: string | null;
+    payment_transaction_id?: string | null;
+    payment_status_message?: string | null;
     created_at: string;
     issued_at?: string | null;
     paid_at?: string | null;
     failed_at?: string | null;
     download_path: string;
+  }>;
+  status_requests?: Array<{
+    id: string;
+    invoice_id: string;
+    requested_by_user_id: string;
+    current_status: "draft" | "issued" | "paid" | "failed";
+    requested_status: "draft" | "issued" | "paid" | "failed";
+    reason?: string | null;
+    state: "pending" | "approved" | "rejected" | "cancelled";
+    reviewed_by_user_id?: string | null;
+    review_note?: string | null;
+    created_at: string;
+    reviewed_at?: string | null;
   }>;
 }
 
@@ -236,5 +252,31 @@ export interface AuthTokenResponse {
   access_token: string;
   token_type: string;
   expires_at: string;
+  refresh_token: string;
+  refresh_expires_at: string;
+  session: {
+    id: string;
+    device_name?: string | null;
+    user_agent?: string | null;
+    ip_address?: string | null;
+    created_at: string;
+    last_seen_at: string;
+    expires_at: string;
+    is_active: boolean;
+  };
   user: AuthUser;
+}
+
+export interface AuthSessionEntry {
+  id: string;
+  user_id: string;
+  device_name?: string | null;
+  user_agent?: string | null;
+  ip_address?: string | null;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  revoked_at?: string | null;
+  revoked_reason?: string | null;
+  is_active: boolean;
 }

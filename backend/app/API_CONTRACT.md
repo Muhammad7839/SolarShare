@@ -157,9 +157,33 @@ POST /auth/login
 Description:
 Authenticates customer credentials and returns Bearer session token.
 
+POST /auth/bootstrap-admin
+Description:
+Creates/promotes an admin user when `x-bootstrap-token` matches `SOLAR_SHARE_ADMIN_BOOTSTRAP_TOKEN`.
+
 GET /auth/me
 Description:
 Returns authenticated user profile from Bearer token.
+
+POST /auth/refresh
+Description:
+Rotates refresh token and returns a new access token bundle.
+
+POST /auth/logout
+Description:
+Revoke current session using refresh token.
+
+GET /auth/sessions
+Description:
+List active/revoked device sessions for authenticated user.
+
+DELETE /auth/sessions/{session_id}
+Description:
+Revoke one user-owned session.
+
+POST /auth/sessions/revoke-others
+Description:
+Revoke all other sessions except current one.
 
 GET /dashboard/me
 Description:
@@ -169,13 +193,46 @@ GET /billing/invoices
 Description:
 Returns persisted invoice lifecycle history for authenticated user.
 
+POST /billing/invoices/{invoice_id}/pay
+Description:
+Charges invoice through configured provider adapter and updates lifecycle status.
+
 PATCH /billing/invoices/{invoice_id}/status
 Description:
-Updates invoice lifecycle status (`draft | issued | paid | failed`) for authenticated user.
+For customers: creates admin moderation request.
+For admins: applies direct override.
+
+POST /billing/invoices/{invoice_id}/status-requests
+Description:
+Creates moderated status-change request with optional reason.
+
+GET /billing/status-requests
+Description:
+Returns authenticated user's status-change requests and review outcomes.
 
 GET /billing/invoices/{invoice_id}/download
 Description:
 Downloads invoice PDF for authenticated user.
+
+GET /admin/billing/status-requests
+Description:
+Admin-only moderation queue for customer billing status requests.
+
+PATCH /admin/billing/status-requests/{request_id}/review
+Description:
+Admin approves/rejects billing status request.
+
+POST /admin/utility-rates/refresh
+Description:
+Admin-triggered utility-rate refresh pipeline run.
+
+GET /admin/utility-rates/refresh-jobs
+Description:
+List utility-rate refresh job history with timestamps and status.
+
+POST /internal/utility-rates/refresh
+Description:
+Cron-safe refresh endpoint requiring `x-internal-token`.
 
 Response:
 {

@@ -17,7 +17,19 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.assistant_service import build_assistant_reply
-from app.auth import create_access_token, get_current_user, hash_password, verify_password
+from app.auth import (
+    create_access_token,
+    get_current_user,
+    hash_password,
+    list_user_sessions,
+    refresh_access_token,
+    require_roles,
+    revoke_current_session,
+    revoke_other_sessions_for_user,
+    revoke_session_by_id_for_user,
+    verify_password,
+)
+from app.billing_service import pay_invoice_for_user
 from app.contact_store import init_contact_store, insert_contact_inquiry
 from app.ops_store import (
     get_admin_analytics_summary,
@@ -27,17 +39,21 @@ from app.ops_store import (
 )
 from app.real_data import resolve_location_context
 from app.project_store import (
+    create_invoice_status_request,
     create_user,
     get_invoice_pdf_for_user_id,
     get_user_by_email,
     init_project_store,
+    list_invoice_status_requests,
     list_billing_history_for_user_id,
     load_dashboard_data,
     load_dashboard_data_for_user,
     mark_user_login,
-    update_invoice_status_for_user_id,
+    review_invoice_status_request,
+    update_invoice_status_as_admin,
+    update_user_role,
 )
-from app.utility_rates import init_utility_rate_store
+from app.utility_rates import init_utility_rate_store, list_rate_refresh_jobs, refresh_utility_rate_store
 from app.schemas import (
     AdminAnalyticsOut,
     AnalyticsEventIn,
@@ -50,8 +66,13 @@ from app.schemas import (
     AuthSignupIn,
     AuthTokenOut,
     AuthUserOut,
+    AuthRefreshIn,
+    AuthLogoutIn,
     DemoRequestIn,
     DemoRequestOut,
+    InvoicePaymentIn,
+    InvoiceStatusRequestIn,
+    InvoiceStatusRequestReviewIn,
     InvoiceStatusUpdateIn,
     LocationResolveIn,
     LocationResolveOut,
@@ -59,6 +80,7 @@ from app.schemas import (
     ScoredOptionSchema,
     LiveComparisonResponse,
     RecommendationResponse,
+    UtilityRateRefreshOut,
 )
 from app.logic import get_live_comparison, get_ranked_options, get_recommendation
 
@@ -213,6 +235,26 @@ def _require_admin_access(request: Request) -> None:
         raise HTTPException(status_code=500, detail="Admin access is not configured.")
 
     if not provided_password or not hmac.compare_digest(provided_password, configured_password):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _require_internal_access(request: Request) -> None:
+    """Protect internal automation endpoints with shared token header."""
+    configured_token = (os.getenv("SOLAR_SHARE_INTERNAL_API_TOKEN") or "").strip()
+    provided_token = (request.headers.get("x-internal-token") or "").strip()
+    if not configured_token:
+        raise HTTPException(status_code=500, detail="Internal token is not configured.")
+    if not provided_token or not hmac.compare_digest(provided_token, configured_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _require_bootstrap_access(request: Request) -> None:
+    """Protect one-time admin bootstrap endpoint with dedicated shared token."""
+    configured_token = (os.getenv("SOLAR_SHARE_ADMIN_BOOTSTRAP_TOKEN") or "").strip()
+    provided_token = (request.headers.get("x-bootstrap-token") or "").strip()
+    if not configured_token:
+        raise HTTPException(status_code=500, detail="Admin bootstrap token is not configured.")
+    if not provided_token or not hmac.compare_digest(provided_token, configured_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -376,23 +418,68 @@ def dashboard_data(user_key: str = ""):
 
 
 @app.post("/auth/signup", response_model=AuthTokenOut)
-def auth_signup(payload: AuthSignupIn):
+def auth_signup(payload: AuthSignupIn, http_request: Request):
     """Create customer account and return access token for authenticated dashboard flows."""
     existing = get_user_by_email(str(payload.email))
     if existing:
         raise HTTPException(status_code=409, detail="An account with this email already exists.")
     user = create_user(email=str(payload.email), password_hash=hash_password(payload.password), role="customer")
-    return create_access_token(user)
+    return create_access_token(
+        user,
+        device_name=http_request.headers.get("x-device-name"),
+        user_agent=http_request.headers.get("user-agent"),
+        ip_address=_client_identifier(http_request),
+    )
+
+
+@app.post("/auth/bootstrap-admin", response_model=AuthTokenOut)
+def auth_bootstrap_admin(payload: AuthSignupIn, http_request: Request):
+    """Create or promote admin user with dedicated bootstrap token gate."""
+    _require_bootstrap_access(http_request)
+    existing = get_user_by_email(str(payload.email))
+    if existing:
+        if str(existing.get("role") or "") != "admin":
+            update_user_role(user_id=str(existing["id"]), role="admin")
+            existing = get_user_by_email(str(payload.email))
+        user = existing
+    else:
+        user = create_user(email=str(payload.email), password_hash=hash_password(payload.password), role="admin")
+    if not user:
+        raise HTTPException(status_code=500, detail="Unable to bootstrap admin account.")
+    return create_access_token(
+        user,
+        device_name=http_request.headers.get("x-device-name") or "bootstrap",
+        user_agent=http_request.headers.get("user-agent"),
+        ip_address=_client_identifier(http_request),
+    )
 
 
 @app.post("/auth/login", response_model=AuthTokenOut)
-def auth_login(payload: AuthLoginIn):
+def auth_login(payload: AuthLoginIn, http_request: Request):
     """Authenticate customer credentials and return a signed JWT."""
     user = get_user_by_email(str(payload.email))
     if not user or not verify_password(payload.password, str(user.get("password_hash") or "")):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     mark_user_login(str(user["id"]))
-    return create_access_token(user)
+    return create_access_token(
+        user,
+        device_name=http_request.headers.get("x-device-name"),
+        user_agent=http_request.headers.get("user-agent"),
+        ip_address=_client_identifier(http_request),
+    )
+
+
+@app.post("/auth/refresh", response_model=AuthTokenOut)
+def auth_refresh(payload: AuthRefreshIn):
+    """Rotate refresh token and return a new access session bundle."""
+    return refresh_access_token(payload.refresh_token)
+
+
+@app.post("/auth/logout")
+def auth_logout(payload: AuthLogoutIn):
+    """Revoke current refresh session."""
+    revoked = revoke_current_session(payload.refresh_token)
+    return {"revoked": bool(revoked)}
 
 
 @app.get("/auth/me", response_model=AuthUserOut)
@@ -407,6 +494,31 @@ def dashboard_me(current_user=Depends(get_current_user)):
     return load_dashboard_data_for_user(user_id=current_user["id"])
 
 
+@app.get("/auth/sessions")
+def auth_sessions(current_user=Depends(get_current_user)):
+    """Return current user's device/session list for account-security controls."""
+    return {"sessions": list_user_sessions(user_id=current_user["id"])}
+
+
+@app.delete("/auth/sessions/{session_id}")
+def auth_revoke_session(session_id: str, current_user=Depends(get_current_user)):
+    """Revoke one user-owned session."""
+    revoked = revoke_session_by_id_for_user(user_id=current_user["id"], session_id=session_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return {"revoked": True, "session_id": session_id}
+
+
+@app.post("/auth/sessions/revoke-others")
+def auth_revoke_other_sessions(current_user=Depends(get_current_user)):
+    """Revoke all sessions except the currently active one."""
+    revoked_count = revoke_other_sessions_for_user(
+        user_id=current_user["id"],
+        keep_session_id=current_user.get("session_id"),
+    )
+    return {"revoked_count": revoked_count}
+
+
 @app.get("/billing/invoices")
 def billing_invoices(current_user=Depends(get_current_user)):
     """Return billing lifecycle history for the authenticated customer."""
@@ -416,11 +528,62 @@ def billing_invoices(current_user=Depends(get_current_user)):
 
 @app.patch("/billing/invoices/{invoice_id}/status")
 def billing_invoice_status(invoice_id: str, payload: InvoiceStatusUpdateIn, current_user=Depends(get_current_user)):
-    """Update invoice lifecycle status for authenticated customer records."""
-    updated = update_invoice_status_for_user_id(user_id=current_user["id"], invoice_id=invoice_id, status=payload.status)
-    if not updated:
+    """Submit customer status-change request or apply direct admin override."""
+    if current_user.get("role") == "admin":
+        updated = update_invoice_status_as_admin(invoice_id=invoice_id, status=payload.status)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+        return {"updated": True, "invoice_id": invoice_id, "status": payload.status, "mode": "admin_override"}
+
+    request_row = create_invoice_status_request(
+        user_id=current_user["id"],
+        invoice_id=invoice_id,
+        requested_status=payload.status,
+        reason="Requested from customer billing dashboard",
+    )
+    if not request_row:
         raise HTTPException(status_code=404, detail="Invoice not found.")
-    return {"updated": True, "invoice_id": invoice_id, "status": payload.status}
+    return {
+        "updated": False,
+        "invoice_id": invoice_id,
+        "status": "pending_review",
+        "request_id": request_row["id"],
+        "mode": "admin_moderation",
+    }
+
+
+@app.post("/billing/invoices/{invoice_id}/status-requests")
+def billing_invoice_status_request(invoice_id: str, payload: InvoiceStatusRequestIn, current_user=Depends(get_current_user)):
+    """Create moderated billing status request for customer accounts."""
+    request_row = create_invoice_status_request(
+        user_id=current_user["id"],
+        invoice_id=invoice_id,
+        requested_status=payload.requested_status,
+        reason=payload.reason,
+    )
+    if not request_row:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+    return {"request": request_row}
+
+
+@app.get("/billing/status-requests")
+def billing_status_requests(current_user=Depends(get_current_user)):
+    """Return customer's own billing status moderation requests."""
+    requests = load_dashboard_data_for_user(user_id=current_user["id"]).get("status_requests", [])
+    return {"requests": requests}
+
+
+@app.post("/billing/invoices/{invoice_id}/pay")
+def billing_invoice_pay(invoice_id: str, payload: InvoicePaymentIn, current_user=Depends(get_current_user)):
+    """Process invoice payment through configured provider adapter."""
+    result = pay_invoice_for_user(
+        user_id=current_user["id"],
+        invoice_id=invoice_id,
+        payment_method_token=payload.payment_method_token,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=str(result.get("error") or "Payment failed."))
+    return result
 
 
 @app.get("/billing/invoices/{invoice_id}/download")
@@ -435,6 +598,49 @@ def billing_invoice_download(invoice_id: str, current_user=Depends(get_current_u
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/admin/billing/status-requests")
+def admin_billing_status_requests(state: Optional[str] = None, _: Dict[str, Any] = Depends(require_roles("admin"))):
+    """Return invoice status requests for admin moderation queues."""
+    return {"requests": list_invoice_status_requests(state=state)}
+
+
+@app.patch("/admin/billing/status-requests/{request_id}/review")
+def admin_review_billing_status_request(
+    request_id: str,
+    payload: InvoiceStatusRequestReviewIn,
+    current_admin: Dict[str, Any] = Depends(require_roles("admin")),
+):
+    """Approve or reject pending customer billing status requests."""
+    reviewed = review_invoice_status_request(
+        request_id=request_id,
+        reviewer_user_id=current_admin["id"],
+        decision=payload.decision,
+        review_note=payload.review_note,
+    )
+    if not reviewed:
+        raise HTTPException(status_code=404, detail="Status request not found or already reviewed.")
+    return {"request": reviewed}
+
+
+@app.post("/admin/utility-rates/refresh", response_model=UtilityRateRefreshOut)
+def admin_refresh_utility_rates(_: Dict[str, Any] = Depends(require_roles("admin"))):
+    """Run utility-rate refresh pipeline and persist timestamped job metadata."""
+    return refresh_utility_rate_store()
+
+
+@app.get("/admin/utility-rates/refresh-jobs")
+def admin_utility_rate_refresh_jobs(limit: int = 25, _: Dict[str, Any] = Depends(require_roles("admin"))):
+    """List recent utility-rate refresh jobs for operational visibility."""
+    return {"jobs": list_rate_refresh_jobs(limit=limit)}
+
+
+@app.post("/internal/utility-rates/refresh", response_model=UtilityRateRefreshOut)
+def internal_refresh_utility_rates(http_request: Request):
+    """Run utility-rate refresh for cron/automation callers with shared-token auth."""
+    _require_internal_access(http_request)
+    return refresh_utility_rate_store()
 
 
 @app.post("/assistant-chat", response_model=AssistantChatOut)

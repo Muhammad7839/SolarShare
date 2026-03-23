@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import httpx
 
 from app.simulation_config import DEFAULT_NY_AVERAGE_RATE, DEFAULT_UTILITY_RATE_BY_REGION
 
@@ -65,20 +69,166 @@ def init_utility_rate_store() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS utility_rate_refresh_jobs (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                status TEXT NOT NULL,
+                records_updated INTEGER NOT NULL DEFAULT 0,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                details TEXT
+            )
+            """
+        )
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_utility_rate_refresh_jobs_started_at ON utility_rate_refresh_jobs(started_at)")
         connection.executemany(
             """
             INSERT INTO utility_rates
             (utility_name, region, avg_rate_per_kwh, source, last_updated)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(utility_name, region)
-            DO UPDATE SET
-                avg_rate_per_kwh=excluded.avg_rate_per_kwh,
-                source=excluded.source,
-                last_updated=excluded.last_updated
+            DO NOTHING
             """,
             [(utility_name, region, rate, source, now_iso) for utility_name, region, rate, source in SEED_RATES],
         )
         connection.commit()
+
+
+def _upsert_rates(connection: sqlite3.Connection, rows: List[tuple[str, str, float, str]], now_iso: str) -> int:
+    """Upsert utility rates and return the number of records processed."""
+    if not rows:
+        return 0
+    connection.executemany(
+        """
+        INSERT INTO utility_rates
+        (utility_name, region, avg_rate_per_kwh, source, last_updated)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(utility_name, region)
+        DO UPDATE SET
+            avg_rate_per_kwh=excluded.avg_rate_per_kwh,
+            source=excluded.source,
+            last_updated=excluded.last_updated
+        """,
+        [(utility_name, region, rate, source, now_iso) for utility_name, region, rate, source in rows],
+    )
+    return len(rows)
+
+
+def _load_external_rate_rows() -> tuple[List[tuple[str, str, float, str]], str]:
+    """Load external rate rows from JSON URL or env payload when configured."""
+    source_url = (os.getenv("SOLAR_SHARE_UTILITY_RATE_SOURCE_URL") or "").strip()
+    raw_json = (os.getenv("SOLAR_SHARE_UTILITY_RATE_SOURCE_JSON") or "").strip()
+
+    payload: Optional[Any] = None
+    source_label = "seed"
+    if source_url:
+        with httpx.Client(timeout=6.0) as client:
+            response = client.get(source_url)
+            response.raise_for_status()
+            payload = response.json()
+        source_label = source_url
+    elif raw_json:
+        payload = json.loads(raw_json)
+        source_label = "env:SOLAR_SHARE_UTILITY_RATE_SOURCE_JSON"
+
+    if payload is None:
+        return [], source_label
+
+    if not isinstance(payload, list):
+        raise ValueError("utility rate source payload must be a JSON array")
+
+    rows: List[tuple[str, str, float, str]] = []
+    for record in payload:
+        if not isinstance(record, dict):
+            continue
+        utility_name = str(record.get("utility_name") or "").strip()
+        region = str(record.get("region") or "").strip()
+        source = str(record.get("source") or "External utility rate source").strip()
+        rate_raw = record.get("avg_rate_per_kwh")
+        if not utility_name or not region:
+            continue
+        try:
+            rate = float(rate_raw)
+        except (TypeError, ValueError):
+            continue
+        if rate <= 0:
+            continue
+        rows.append((utility_name, region, rate, source))
+    return rows, source_label
+
+
+def refresh_utility_rate_store() -> Dict[str, Any]:
+    """Refresh utility rate table from external source when available, else seeded defaults."""
+    init_utility_rate_store()
+    path = _db_path()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    refresh_id = f"refresh_{now_iso.replace(':', '').replace('-', '').replace('.', '')}"
+    with sqlite3.connect(path) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.execute(
+            """
+            INSERT INTO utility_rate_refresh_jobs (id, source, status, records_updated, started_at)
+            VALUES (?, ?, 'running', 0, ?)
+            """,
+            (refresh_id, "pending", now_iso),
+        )
+        connection.commit()
+
+        try:
+            external_rows, source_label = _load_external_rate_rows()
+            rows = external_rows or [(utility_name, region, rate, f"{source} (auto-refresh)") for utility_name, region, rate, source in SEED_RATES]
+            records_updated = _upsert_rates(connection, rows, now_iso)
+            status = "success"
+            details = "Loaded external source." if external_rows else "External source unavailable; refreshed seeded defaults."
+        except Exception as exc:
+            records_updated = _upsert_rates(
+                connection,
+                [(utility_name, region, rate, f"{source} (fallback-refresh)") for utility_name, region, rate, source in SEED_RATES],
+                now_iso,
+            )
+            source_label = "seed:fallback"
+            status = "fallback"
+            details = f"Refresh fallback used after source error: {exc}"
+
+        completed_at = datetime.now(timezone.utc).isoformat()
+        connection.execute(
+            """
+            UPDATE utility_rate_refresh_jobs
+            SET source = ?, status = ?, records_updated = ?, completed_at = ?, details = ?
+            WHERE id = ?
+            """,
+            (source_label, status, int(records_updated), completed_at, details, refresh_id),
+        )
+        connection.commit()
+    return {
+        "refresh_id": refresh_id,
+        "source": source_label,
+        "status": status,
+        "records_updated": int(records_updated),
+        "started_at": now_iso,
+        "completed_at": completed_at,
+        "details": details,
+    }
+
+
+def list_rate_refresh_jobs(limit: int = 25) -> List[Dict[str, Any]]:
+    """Return utility rate refresh history for timestamped operational audits."""
+    init_utility_rate_store()
+    safe_limit = max(min(int(limit), 200), 1)
+    with sqlite3.connect(_db_path()) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT id, source, status, records_updated, started_at, completed_at, details
+            FROM utility_rate_refresh_jobs
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+    return [{key: row[key] for key in row.keys()} for row in rows]
 
 
 def get_utility_rate(utility_name: str | None, region: str | None) -> UtilityRateResult:

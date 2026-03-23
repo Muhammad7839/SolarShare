@@ -6,16 +6,21 @@ import { SectionTitle } from "@/components/SectionTitle";
 import {
   buildInvoiceDownloadUrl,
   clearAuthSession,
+  fetchAuthSessions,
   fetchBillingInvoices,
   fetchCurrentUser,
   fetchDashboardDataAuthenticated,
   getAuthToken,
   getAuthUser,
   loginCustomer,
+  logoutCurrentSession,
+  payInvoice,
+  revokeOtherSessions,
+  revokeSession,
   signupCustomer,
   updateInvoiceStatus
 } from "@/lib/api";
-import { AuthUser, DashboardDataResponse } from "@/lib/types";
+import { AuthSessionEntry, AuthUser, DashboardDataResponse } from "@/lib/types";
 
 type AuthMode = "login" | "signup";
 type InvoiceStatus = "draft" | "issued" | "paid" | "failed";
@@ -53,6 +58,7 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invoiceActionId, setInvoiceActionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<AuthSessionEntry[]>([]);
 
   async function refreshDashboard() {
     setLoading(true);
@@ -61,11 +67,14 @@ export default function DashboardPage() {
       const profile = await fetchCurrentUser();
       const dashboardPayload = await fetchDashboardDataAuthenticated();
       const invoicePayload = await fetchBillingInvoices();
+      const sessionPayload = await fetchAuthSessions();
       setUser(profile);
       setData({ ...dashboardPayload, billing_history: invoicePayload });
+      setSessions(sessionPayload);
     } catch (loadError) {
       setUser(null);
       setData(null);
+      setSessions([]);
       clearAuthSession();
       setError(loadError instanceof Error ? loadError.message : "Unable to load dashboard.");
     } finally {
@@ -109,6 +118,19 @@ export default function DashboardPage() {
       await refreshDashboard();
     } catch (invoiceError) {
       setError(invoiceError instanceof Error ? invoiceError.message : "Unable to update invoice.");
+    } finally {
+      setInvoiceActionId(null);
+    }
+  }
+
+  async function handlePayInvoice(invoiceId: string) {
+    setInvoiceActionId(invoiceId);
+    setError(null);
+    try {
+      await payInvoice(invoiceId, "demo_card");
+      await refreshDashboard();
+    } catch (paymentError) {
+      setError(paymentError instanceof Error ? paymentError.message : "Unable to process payment.");
     } finally {
       setInvoiceActionId(null);
     }
@@ -200,9 +222,10 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => {
-            clearAuthSession();
+            void logoutCurrentSession();
             setUser(null);
             setData(null);
+            setSessions([]);
           }}
           className="rounded-lg border border-solarBlue-200 px-3 py-1.5 font-semibold text-solarBlue-700 hover:bg-solarBlue-50"
         >
@@ -277,6 +300,7 @@ export default function DashboardPage() {
                       <th className="border-b border-solarBlue-100 py-2 pr-3">Savings</th>
                       <th className="border-b border-solarBlue-100 py-2 pr-3">Rollover</th>
                       <th className="border-b border-solarBlue-100 py-2 pr-3">Status</th>
+                      <th className="border-b border-solarBlue-100 py-2 pr-3">Payment Rail</th>
                       <th className="border-b border-solarBlue-100 py-2 pr-3">Actions</th>
                     </tr>
                   </thead>
@@ -292,7 +316,13 @@ export default function DashboardPage() {
                           <span className="rounded-full bg-solarBlue-50 px-2 py-1 text-xs font-semibold text-solarBlue-700">{invoice.status}</span>
                         </td>
                         <td className="border-b border-solarBlue-50 py-2 pr-3">
-                          <div className="flex items-center gap-2">
+                          <div className="text-xs">
+                            <p className="font-semibold text-solarBlue-900/80">{invoice.payment_provider || "pending"}</p>
+                            <p className="text-solarBlue-900/60">{invoice.payment_transaction_id || "No transaction yet"}</p>
+                          </div>
+                        </td>
+                        <td className="border-b border-solarBlue-50 py-2 pr-3">
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={() => {
@@ -306,23 +336,24 @@ export default function DashboardPage() {
                               type="button"
                               disabled={invoiceActionId === invoice.invoice_id || invoice.status === "paid"}
                               onClick={() => {
-                                void setInvoiceStatus(invoice.invoice_id, "paid");
+                                void handlePayInvoice(invoice.invoice_id);
                               }}
                               className="rounded-md border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
                             >
-                              Mark Paid
+                              Pay Invoice
                             </button>
                             <button
                               type="button"
-                              disabled={invoiceActionId === invoice.invoice_id || invoice.status === "failed"}
+                              disabled={invoiceActionId === invoice.invoice_id}
                               onClick={() => {
                                 void setInvoiceStatus(invoice.invoice_id, "failed");
                               }}
                               className="rounded-md border border-amber-200 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
                             >
-                              Mark Failed
+                              Request Status Change
                             </button>
                           </div>
+                          {invoice.payment_status_message ? <p className="mt-1 text-xs text-solarBlue-900/60">{invoice.payment_status_message}</p> : null}
                         </td>
                       </tr>
                     ))}
@@ -332,6 +363,67 @@ export default function DashboardPage() {
                 <p className="text-sm text-solarBlue-900/70">No invoice history yet for this account.</p>
               )}
             </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 bg-white p-5 md:col-span-2">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Status Requests (Admin Moderation)</p>
+            <div className="mt-3 space-y-2 text-sm">
+              {data.status_requests?.length ? (
+                data.status_requests.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-solarBlue-100 bg-solarBlue-50/50 p-3">
+                    <p className="font-semibold text-solarBlue-900/80">
+                      Invoice {request.invoice_id} {"->"} {request.requested_status} ({request.state})
+                    </p>
+                    <p className="text-solarBlue-900/70">Reason: {request.reason || "No reason provided."}</p>
+                    {request.review_note ? <p className="text-solarBlue-900/65">Review note: {request.review_note}</p> : null}
+                  </div>
+                ))
+              ) : (
+                <p className="text-solarBlue-900/70">No status requests submitted yet.</p>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 bg-white p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60">Session Controls</p>
+            <p className="mt-2 text-sm text-solarBlue-900/70">
+              Active devices: {sessions.filter((session) => session.is_active).length}
+            </p>
+            <div className="mt-3 space-y-2">
+              {sessions.slice(0, 5).map((session) => (
+                <div key={session.id} className="rounded-xl border border-solarBlue-100 p-2 text-xs text-solarBlue-900/75">
+                  <p className="font-semibold">{session.device_name || "Unknown device"}</p>
+                  <p>{session.user_agent || "No user-agent available"}</p>
+                  <p>{session.is_active ? "Active" : `Revoked: ${session.revoked_reason || "unknown"}`}</p>
+                  {session.is_active ? (
+                    <button
+                      type="button"
+                      className="mt-1 rounded-md border border-solarBlue-200 px-2 py-1 font-semibold text-solarBlue-700 hover:bg-solarBlue-50"
+                      onClick={() => {
+                        void revokeSession(session.id).then(refreshDashboard).catch((sessionError: unknown) => {
+                          setError(sessionError instanceof Error ? sessionError.message : "Unable to revoke session.");
+                        });
+                      }}
+                    >
+                      Revoke
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="mt-3 rounded-md border border-solarBlue-200 px-3 py-1.5 text-xs font-semibold text-solarBlue-700 hover:bg-solarBlue-50"
+              onClick={() => {
+                void revokeOtherSessions()
+                  .then(() => refreshDashboard())
+                  .catch((sessionError: unknown) => {
+                    setError(sessionError instanceof Error ? sessionError.message : "Unable to revoke other sessions.");
+                  });
+              }}
+            >
+              Revoke Other Sessions
+            </button>
           </article>
         </section>
       ) : null}

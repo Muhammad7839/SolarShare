@@ -2,6 +2,7 @@
 import {
   AssistantChatRequest,
   AssistantChatResponse,
+  AuthSessionEntry,
   AuthCredentials,
   AuthTokenResponse,
   AuthUser,
@@ -16,7 +17,9 @@ import {
 
 const defaultHeaders = { "Content-Type": "application/json" };
 const AUTH_TOKEN_STORAGE_KEY = "solarshare_auth_token_v1";
+const AUTH_REFRESH_TOKEN_STORAGE_KEY = "solarshare_refresh_token_v1";
 const AUTH_USER_STORAGE_KEY = "solarshare_auth_user_v1";
+const AUTH_SESSION_STORAGE_KEY = "solarshare_auth_session_v1";
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
 
 function apiUrl(path: string): string {
@@ -114,12 +117,16 @@ export function getAuthIdentityKey(): string | null {
 
 export function clearAuthSession(): void {
   removeStorage(AUTH_TOKEN_STORAGE_KEY);
+  removeStorage(AUTH_REFRESH_TOKEN_STORAGE_KEY);
   removeStorage(AUTH_USER_STORAGE_KEY);
+  removeStorage(AUTH_SESSION_STORAGE_KEY);
 }
 
 function persistAuthSession(payload: AuthTokenResponse): void {
   writeStorage(AUTH_TOKEN_STORAGE_KEY, payload.access_token);
+  writeStorage(AUTH_REFRESH_TOKEN_STORAGE_KEY, payload.refresh_token);
   writeStorage(AUTH_USER_STORAGE_KEY, JSON.stringify(payload.user));
+  writeStorage(AUTH_SESSION_STORAGE_KEY, JSON.stringify(payload.session));
 }
 
 function authHeaders(token?: string | null): Record<string, string> {
@@ -128,6 +135,18 @@ function authHeaders(token?: string | null): Record<string, string> {
     return mergeHeaders();
   }
   return mergeHeaders({ Authorization: `Bearer ${activeToken}` });
+}
+
+function getRefreshToken(): string | null {
+  return readStorage(AUTH_REFRESH_TOKEN_STORAGE_KEY);
+}
+
+function deviceNameHeader(): Record<string, string> {
+  if (typeof navigator === "undefined") {
+    return {};
+  }
+  const label = `${navigator.platform || "unknown-platform"}:${navigator.language || "unknown-lang"}`;
+  return { "x-device-name": label.slice(0, 80) };
 }
 
 export async function fetchLiveComparison(payload: UserRequest): Promise<LiveComparisonResponse> {
@@ -142,7 +161,7 @@ export async function fetchLiveComparison(payload: UserRequest): Promise<LiveCom
 }
 
 export async function signupCustomer(payload: AuthCredentials): Promise<AuthTokenResponse> {
-  const response = await postJson("/auth/signup", payload, mergeHeaders());
+  const response = await postJson("/auth/signup", payload, mergeHeaders(deviceNameHeader()));
   if (!response.ok) {
     const errorBody = await safeJson(response);
     throw new Error(resolveErrorMessage(errorBody, "Unable to create account."));
@@ -153,7 +172,7 @@ export async function signupCustomer(payload: AuthCredentials): Promise<AuthToke
 }
 
 export async function loginCustomer(payload: AuthCredentials): Promise<AuthTokenResponse> {
-  const response = await postJson("/auth/login", payload, mergeHeaders());
+  const response = await postJson("/auth/login", payload, mergeHeaders(deviceNameHeader()));
   if (!response.ok) {
     const errorBody = await safeJson(response);
     throw new Error(resolveErrorMessage(errorBody, "Unable to sign in."));
@@ -174,6 +193,10 @@ export async function fetchCurrentUser(token?: string | null): Promise<AuthUser>
     throw new Error(backendUnavailableMessage());
   }
   if (!response.ok) {
+    const refreshed = await refreshAuthSession();
+    if (refreshed) {
+      return fetchCurrentUser(getAuthToken());
+    }
     clearAuthSession();
     const errorBody = await safeJson(response);
     throw new Error(resolveErrorMessage(errorBody, "Unable to verify session."));
@@ -181,6 +204,31 @@ export async function fetchCurrentUser(token?: string | null): Promise<AuthUser>
   const user = (await response.json()) as AuthUser;
   writeStorage(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
   return user;
+}
+
+export async function refreshAuthSession(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    return false;
+  }
+  const response = await postJson("/auth/refresh", { refresh_token: refreshToken }, mergeHeaders());
+  if (!response.ok) {
+    clearAuthSession();
+    return false;
+  }
+  const payload = (await response.json()) as AuthTokenResponse;
+  persistAuthSession(payload);
+  return true;
+}
+
+export async function logoutCurrentSession(): Promise<void> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    clearAuthSession();
+    return;
+  }
+  await postJson("/auth/logout", { refresh_token: refreshToken }, mergeHeaders());
+  clearAuthSession();
 }
 
 export async function submitContactInquiry(payload: ContactInquiry): Promise<{ inquiry_id: string; received: boolean }> {
@@ -286,6 +334,9 @@ export async function fetchDashboardDataAuthenticated(token?: string | null): Pr
     throw new Error(backendUnavailableMessage());
   }
   if (!response.ok) {
+    if (response.status === 401 && (await refreshAuthSession())) {
+      return fetchDashboardDataAuthenticated(getAuthToken());
+    }
     const errorBody = await safeJson(response);
     throw new Error(resolveErrorMessage(errorBody, "Unable to load authenticated dashboard data."));
   }
@@ -303,6 +354,9 @@ export async function fetchBillingInvoices(token?: string | null): Promise<NonNu
     throw new Error(backendUnavailableMessage());
   }
   if (!response.ok) {
+    if (response.status === 401 && (await refreshAuthSession())) {
+      return fetchBillingInvoices(getAuthToken());
+    }
     const errorBody = await safeJson(response);
     throw new Error(resolveErrorMessage(errorBody, "Unable to load billing history."));
   }
@@ -322,9 +376,86 @@ export async function updateInvoiceStatus(
     authHeaders(token)
   );
   if (!response.ok) {
+    if (response.status === 401 && (await refreshAuthSession())) {
+      return updateInvoiceStatus(invoiceId, status, getAuthToken());
+    }
     const errorBody = await safeJson(response);
     throw new Error(resolveErrorMessage(errorBody, "Unable to update billing status."));
   }
+}
+
+export async function payInvoice(
+  invoiceId: string,
+  paymentMethodToken?: string,
+  token?: string | null
+): Promise<{ ok: boolean; status: string; message: string }> {
+  const normalizedInvoiceId = encodeURIComponent(invoiceId);
+  const response = await postJson(
+    `/billing/invoices/${normalizedInvoiceId}/pay`,
+    { payment_method_token: paymentMethodToken || null },
+    authHeaders(token)
+  );
+  if (!response.ok) {
+    if (response.status === 401 && (await refreshAuthSession())) {
+      return payInvoice(invoiceId, paymentMethodToken, getAuthToken());
+    }
+    const errorBody = await safeJson(response);
+    throw new Error(resolveErrorMessage(errorBody, "Unable to process payment."));
+  }
+  return response.json() as Promise<{ ok: boolean; status: string; message: string }>;
+}
+
+export async function fetchAuthSessions(token?: string | null): Promise<AuthSessionEntry[]> {
+  let response: Response;
+  try {
+    response = await fetch(apiUrl("/auth/sessions"), {
+      method: "GET",
+      headers: authHeaders(token),
+    });
+  } catch {
+    throw new Error(backendUnavailableMessage());
+  }
+  if (!response.ok) {
+    if (response.status === 401 && (await refreshAuthSession())) {
+      return fetchAuthSessions(getAuthToken());
+    }
+    const errorBody = await safeJson(response);
+    throw new Error(resolveErrorMessage(errorBody, "Unable to load session list."));
+  }
+  const payload = (await response.json()) as { sessions: AuthSessionEntry[] };
+  return payload.sessions || [];
+}
+
+export async function revokeSession(sessionId: string, token?: string | null): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(`/auth/sessions/${encodeURIComponent(sessionId)}`), {
+      method: "DELETE",
+      headers: authHeaders(token),
+    });
+  } catch {
+    throw new Error(backendUnavailableMessage());
+  }
+  if (!response.ok) {
+    if (response.status === 401 && (await refreshAuthSession())) {
+      return revokeSession(sessionId, getAuthToken());
+    }
+    const errorBody = await safeJson(response);
+    throw new Error(resolveErrorMessage(errorBody, "Unable to revoke session."));
+  }
+}
+
+export async function revokeOtherSessions(token?: string | null): Promise<number> {
+  const response = await postJson("/auth/sessions/revoke-others", {}, authHeaders(token));
+  if (!response.ok) {
+    if (response.status === 401 && (await refreshAuthSession())) {
+      return revokeOtherSessions(getAuthToken());
+    }
+    const errorBody = await safeJson(response);
+    throw new Error(resolveErrorMessage(errorBody, "Unable to revoke other sessions."));
+  }
+  const payload = (await response.json()) as { revoked_count?: number };
+  return payload.revoked_count || 0;
 }
 
 export function buildInvoiceDownloadUrl(invoiceId: string): string {

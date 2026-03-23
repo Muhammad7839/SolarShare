@@ -9,7 +9,7 @@ import app.main as app_main
 from app.schemas import UserRequest
 import app.logic as logic
 from app.simulation_config import ANNUAL_OUTPUT_PER_KW, production_shares_sum
-from app.utility_rates import get_utility_rate
+from app.utility_rates import get_utility_rate, list_rate_refresh_jobs, refresh_utility_rate_store
 
 
 client = TestClient(app)
@@ -295,6 +295,24 @@ def test_utility_rate_lookup_prefers_utility_table_and_has_ny_fallback() -> None
     assert fallback_rate.is_estimated is True
 
 
+def test_utility_rate_refresh_pipeline_records_timestamped_job(tmp_path, monkeypatch) -> None:
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+    monkeypatch.setenv(
+        "SOLAR_SHARE_UTILITY_RATE_SOURCE_JSON",
+        '[{"utility_name":"Con Edison","region":"NYC","avg_rate_per_kwh":0.301,"source":"test fixture"}]',
+    )
+
+    result = refresh_utility_rate_store()
+    assert result["records_updated"] >= 1
+    assert result["started_at"]
+    assert result["completed_at"]
+
+    jobs = list_rate_refresh_jobs(limit=5)
+    assert len(jobs) >= 1
+    assert jobs[0]["status"] in {"success", "fallback"}
+
+
 def test_generation_model_annual_total_and_monthly_shape_are_consistent() -> None:
     response = client.post(
         "/live-comparison",
@@ -354,9 +372,51 @@ def test_auth_dashboard_requires_token_and_uses_authenticated_identity(tmp_path,
     assert dashboard.json()["auth_based"] is True
 
 
+def test_auth_refresh_and_session_controls(tmp_path, monkeypatch) -> None:
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+
+    signup = client.post(
+        "/auth/signup",
+        json={"email": "session@example.com", "password": "password123"},
+        headers={"x-device-name": "macbook-pro"},
+    )
+    assert signup.status_code == 200
+    session_payload = signup.json()
+    access_token = session_payload["access_token"]
+    refresh_token = session_payload["refresh_token"]
+    active_session_id = session_payload["session"]["id"]
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    sessions_response = client.get("/auth/sessions", headers=headers)
+    assert sessions_response.status_code == 200
+    sessions = sessions_response.json()["sessions"]
+    assert len(sessions) >= 1
+    assert any(item["id"] == active_session_id for item in sessions)
+
+    refresh_response = client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    assert refresh_response.status_code == 200
+    refreshed = refresh_response.json()
+    assert refreshed["access_token"] != access_token
+    assert refreshed["refresh_token"] != refresh_token
+
+    refreshed_headers = {"Authorization": f"Bearer {refreshed['access_token']}"}
+    revoke_others = client.post("/auth/sessions/revoke-others", headers=refreshed_headers)
+    assert revoke_others.status_code == 200
+    assert revoke_others.json()["revoked_count"] >= 0
+
+    logout = client.post("/auth/logout", json={"refresh_token": refreshed["refresh_token"]})
+    assert logout.status_code == 200
+    assert logout.json()["revoked"] is True
+
+    after_logout = client.get("/dashboard/me", headers=refreshed_headers)
+    assert after_logout.status_code == 401
+
+
 def test_invoice_lifecycle_update_and_download(tmp_path, monkeypatch) -> None:
     ops_db_path = tmp_path / "ops_analytics.sqlite3"
     monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+    monkeypatch.setenv("SOLAR_SHARE_ADMIN_BOOTSTRAP_TOKEN", "bootstrap-secret")
 
     signup = client.post(
         "/auth/signup",
@@ -387,22 +447,69 @@ def test_invoice_lifecycle_update_and_download(tmp_path, monkeypatch) -> None:
     assert len(invoices) >= 1
     invoice_id = invoices[0]["invoice_id"]
 
-    update_response = client.patch(
-        f"/billing/invoices/{invoice_id}/status",
-        json={"status": "paid"},
+    payment_response = client.post(
+        f"/billing/invoices/{invoice_id}/pay",
+        json={"payment_method_token": "demo_card"},
         headers=headers,
     )
-    assert update_response.status_code == 200
+    assert payment_response.status_code == 200
+    assert payment_response.json()["status"] == "paid"
 
     updated_invoices = client.get("/billing/invoices", headers=headers).json()["invoices"]
     target = next(item for item in updated_invoices if item["invoice_id"] == invoice_id)
     assert target["status"] == "paid"
     assert target["billing_status"] == "paid"
+    assert target["payment_provider"]
+    assert target["payment_transaction_id"]
+
+    # Customer status updates now create moderated requests.
+    request_response = client.patch(
+        f"/billing/invoices/{invoice_id}/status",
+        json={"status": "failed"},
+        headers=headers,
+    )
+    assert request_response.status_code == 200
+    assert request_response.json()["mode"] == "admin_moderation"
+    request_id = request_response.json()["request_id"]
+
+    admin_session = client.post(
+        "/auth/bootstrap-admin",
+        json={"email": "admin@example.com", "password": "adminpass123"},
+        headers={"x-bootstrap-token": "bootstrap-secret"},
+    )
+    assert admin_session.status_code == 200
+    admin_headers = {"Authorization": f"Bearer {admin_session.json()['access_token']}"}
+
+    review_response = client.patch(
+        f"/admin/billing/status-requests/{request_id}/review",
+        json={"decision": "approve", "review_note": "Approved by operations"},
+        headers=admin_headers,
+    )
+    assert review_response.status_code == 200
+
+    final_invoices = client.get("/billing/invoices", headers=headers).json()["invoices"]
+    final_target = next(item for item in final_invoices if item["invoice_id"] == invoice_id)
+    assert final_target["status"] == "failed"
 
     download_response = client.get(f"/billing/invoices/{invoice_id}/download", headers=headers)
     assert download_response.status_code == 200
     assert download_response.headers.get("content-type") == "application/pdf"
     assert len(download_response.content) > 100
+
+
+def test_customer_cannot_access_admin_moderation_routes(tmp_path, monkeypatch) -> None:
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+
+    customer = client.post(
+        "/auth/signup",
+        json={"email": "rbac@example.com", "password": "password123"},
+    )
+    assert customer.status_code == 200
+    headers = {"Authorization": f"Bearer {customer.json()['access_token']}"}
+
+    queue = client.get("/admin/billing/status-requests", headers=headers)
+    assert queue.status_code == 403
 
 
 def test_root_returns_api_status_json() -> None:

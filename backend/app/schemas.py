@@ -489,6 +489,9 @@ class AuthTokenOut(BaseModel):
     access_token: str
     token_type: str
     expires_at: str
+    refresh_token: str
+    refresh_expires_at: str
+    session: Dict[str, Any]
     user: AuthUserOut
 
 
@@ -498,3 +501,75 @@ class InvoiceStatusUpdateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     status: Literal["draft", "issued", "paid", "failed"]
+
+
+class AuthRefreshIn(BaseModel):
+    """Refresh token payload used to rotate session credentials."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    refresh_token: str = Field(min_length=20, max_length=400)
+
+
+class AuthLogoutIn(BaseModel):
+    """Logout payload used to revoke current refresh session."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    refresh_token: str = Field(min_length=20, max_length=400)
+
+
+class InvoicePaymentIn(BaseModel):
+    """Payment request payload for charging an invoice."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    payment_method_token: Optional[str] = Field(default=None, max_length=200)
+
+
+class InvoiceStatusRequestIn(BaseModel):
+    """Customer request for invoice status mutation that requires admin review."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    requested_status: Literal["draft", "issued", "paid", "failed"]
+    reason: Optional[str] = Field(default=None, max_length=240)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: Optional[str]) -> Optional[str]:
+        """Normalize optional moderation request notes."""
+        if value is None:
+            return None
+        normalized = _clean_text(value)
+        return normalized or None
+
+
+class InvoiceStatusRequestReviewIn(BaseModel):
+    """Admin moderation decision payload for invoice status requests."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    decision: Literal["approve", "reject"]
+    review_note: Optional[str] = Field(default=None, max_length=240)
+
+    @field_validator("review_note")
+    @classmethod
+    def normalize_review_note(cls, value: Optional[str]) -> Optional[str]:
+        """Normalize review notes before persistence."""
+        if value is None:
+            return None
+        normalized = _clean_text(value)
+        return normalized or None
+
+
+class UtilityRateRefreshOut(BaseModel):
+    """Utility-rate refresh summary for pipeline execution endpoints."""
+
+    refresh_id: str
+    source: str
+    status: str
+    records_updated: int
+    started_at: str
+    completed_at: str
+    details: str
