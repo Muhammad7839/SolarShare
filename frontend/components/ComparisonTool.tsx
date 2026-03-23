@@ -14,12 +14,31 @@ const priorities: Array<{ value: PriorityMode; label: string }> = [
 
 const zipSuggestionPool = ["10001", "11201", "11368", "11757", "11746", "11590", "11901"];
 
+function getUserKey(): string {
+  if (typeof window === "undefined") {
+    return "ss-server";
+  }
+  try {
+    const key = "solarshare_session_id_v2";
+    const existing = window.localStorage.getItem(key);
+    if (existing) {
+      return existing;
+    }
+    const created = `ss-${Math.random().toString(36).slice(2, 10)}`;
+    window.localStorage.setItem(key, created);
+    return created;
+  } catch {
+    return "ss-browser";
+  }
+}
+
 export function ComparisonTool() {
   const [step, setStep] = useState(1);
   const [location, setLocation] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [usageInput, setUsageInput] = useState("650");
   const [priority, setPriority] = useState<PriorityMode>("balanced");
+  const [autoAssign, setAutoAssign] = useState(true);
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +49,7 @@ export function ComparisonTool() {
   const financial = result?.financial_breakdown;
   const confidenceScore = result?.confidence_score ?? result?.resolution_confidence ?? 0;
   const isWaitlist = result?.project_status === "waitlist";
-  const chartData = useMemo(() => {
+  const optionChartData = useMemo(() => {
     if (!result) {
       return [];
     }
@@ -39,6 +58,13 @@ export function ComparisonTool() {
       savings: Math.max(item.savings_vs_baseline, 0)
     }));
   }, [result]);
+  const monthlyChartData = useMemo(() => {
+    const monthly = financial?.monthly_breakdown || [];
+    return monthly.map((entry) => ({
+      month: entry.month,
+      savings: Number(entry.savings || 0)
+    }));
+  }, [financial]);
 
   function usageValue(): number | null {
     const trimmed = usageInput.trim();
@@ -129,6 +155,8 @@ export function ComparisonTool() {
       const payload = await fetchLiveComparison({
         location: location.trim(),
         zip_code: zipCode.trim() || null,
+        user_key: getUserKey(),
+        assign_project: autoAssign,
         monthly_usage_kwh: parsedUsage,
         priority
       });
@@ -249,6 +277,16 @@ export function ComparisonTool() {
                 </select>
               </label>
 
+              <label className="flex items-center gap-2 text-sm font-semibold text-solarBlue-900/80 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={autoAssign}
+                  onChange={(event) => setAutoAssign(event.target.checked)}
+                  className="h-4 w-4 rounded border-solarBlue-300"
+                />
+                Automatically assign best project if capacity is available
+              </label>
+
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
@@ -286,6 +324,9 @@ export function ComparisonTool() {
                 </p>
                 <p>
                   Priority: <strong>{priorities.find((item) => item.value === priority)?.label || priority}</strong>
+                </p>
+                <p>
+                  Auto-assign best project: <strong>{autoAssign ? "Enabled" : "Disabled"}</strong>
                 </p>
               </article>
 
@@ -337,11 +378,13 @@ export function ComparisonTool() {
               </p>
               <p>
                 Estimated Monthly Savings:{" "}
-                <strong className="metric-value metric-accent-green">{financial ? `$${financial.user_savings.toFixed(2)}` : "-"}</strong>
+                <strong className="metric-value metric-accent-green">
+                  {financial ? `$${(financial.average_monthly_savings ?? financial.user_savings).toFixed(2)}` : "-"}
+                </strong>
               </p>
               <p>
                 Estimated Annual Savings:{" "}
-                <strong className="metric-value metric-accent-green">{financial ? `$${(financial.user_savings * 12).toFixed(2)}` : "-"}</strong>
+                <strong className="metric-value metric-accent-green">{financial ? `$${(financial.annual_savings ?? financial.user_savings).toFixed(2)}` : "-"}</strong>
               </p>
               <p>
                 Reliability:{" "}
@@ -349,7 +392,9 @@ export function ComparisonTool() {
               </p>
               <p>
                 CO2 avoided estimate:{" "}
-                <strong className="metric-value">{financial ? `${Math.round((financial.credit_value / 0.2) * 0.7)} lb/year` : "-"}</strong>
+                <strong className="metric-value">
+                  {financial ? `${Math.round((((financial.estimated_credit_value ?? financial.credit_value) / 0.2) * 0.7))} lb/year` : "-"}
+                </strong>
               </p>
             </div>
           </article>
@@ -357,8 +402,8 @@ export function ComparisonTool() {
           <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Savings by Option</p>
             <div className="mt-4 space-y-3">
-              {chartData.length ? (
-                chartData.map((row) => (
+              {optionChartData.length ? (
+                optionChartData.map((row) => (
                   <div key={row.name} className="grid grid-cols-[120px_1fr_auto] items-center gap-3">
                     <span className="truncate text-xs font-semibold text-solarBlue-900/70 dark:text-slate-200">{row.name}</span>
                     <div className="h-2 rounded-full bg-solarBlue-50 dark:bg-slate-800">
@@ -377,6 +422,31 @@ export function ComparisonTool() {
           </article>
 
           <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">12-Month Savings Simulation</p>
+            <div className="mt-4 space-y-3">
+              {monthlyChartData.length ? (
+                monthlyChartData.map((row) => (
+                  <div key={row.month} className="grid grid-cols-[32px_1fr_auto] items-center gap-3">
+                    <span className="text-xs font-semibold text-solarBlue-900/70 dark:text-slate-200">{row.month}</span>
+                    <div className="h-2 rounded-full bg-solarBlue-50 dark:bg-slate-800">
+                      <div
+                        className="h-2 rounded-full bg-gradient-to-r from-solarBlue-500 to-energyGreen-500"
+                        style={{ width: `${Math.min(Math.max((row.savings / 30) * 100, 2), 100)}%` }}
+                      />
+                    </div>
+                    <span className="metric-value metric-accent-green text-xs font-bold text-solarBlue-900 dark:text-emerald-300">${row.savings.toFixed(2)}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-solarBlue-900/60 dark:text-slate-300">No monthly simulation data yet.</p>
+              )}
+            </div>
+            <p className="mt-3 text-xs text-solarBlue-900/60 dark:text-slate-300">
+              Seasonality is modeled, so winter months can show lower savings than summer months.
+            </p>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Live Data Context</p>
             <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
               <p>Location: {result?.market_context.resolved_location || "-"}</p>
@@ -388,7 +458,11 @@ export function ComparisonTool() {
               <p>Utility: {result?.market_context.utility || "-"}</p>
               <p>Project status: {result?.project_status || "-"}</p>
               <p>Matched projects: {result?.matched_project_count ?? "-"}</p>
+              <p>Project: {result?.project_name || "-"}</p>
+              <p>Project capacity: {result?.project_capacity ? `${result.project_capacity} kW` : "-"}</p>
+              <p>Remaining capacity: {result?.remaining_capacity ?? "-"}</p>
               {isWaitlist ? <p>Waitlist timeline: {result?.waitlist_timeline || "Estimated availability pending"}</p> : null}
+              {result?.waitlist_position ? <p>Waitlist position estimate: #{result.waitlist_position}</p> : null}
               <p>Project detail: {result?.project_status_reason || "-"}</p>
               <p>Utility baseline: {result ? `$${result.market_context.utility_price_per_kwh.toFixed(3)}/kWh` : "-"}</p>
               <p>Rate source: {result?.market_context.rate_source || "-"}</p>
@@ -397,7 +471,7 @@ export function ComparisonTool() {
               <p>Observed: {result?.market_context.observed_at_utc || "-"}</p>
               {result?.market_context.rate_is_estimated ? (
                 <p className="rounded-lg bg-amber-50 px-2 py-1 text-amber-700">
-                  Rate is estimated based on New York averages.
+                  This estimate uses average utility rates.
                 </p>
               ) : null}
             </div>
@@ -429,6 +503,10 @@ export function ComparisonTool() {
               <p>Platform revenue: {financial ? `$${financial.platform_revenue.toFixed(2)}` : "-"}</p>
               <p>Developer payout: {financial ? `$${financial.developer_payout.toFixed(2)}` : "-"}</p>
               <p>Platform margin: {financial ? `${Math.round(financial.platform_margin * 100)}%` : "-"}</p>
+              <p>System size (estimated): {financial ? `${financial.system_size_kw?.toFixed(2)} kW` : "-"}</p>
+              <p>Subscription size: {financial ? `${financial.subscription_size_kw?.toFixed(2)} kW` : "-"}</p>
+              <p>Rollover credit balance: {financial ? `${financial.rollover_credit_balance?.toFixed(2)} kWh` : "-"}</p>
+              <p>Savings percent: {financial ? `${financial.savings_percent?.toFixed(2)}%` : "-"}</p>
               <p>{financial?.platform_revenue_explanation || "How SolarShare makes money"}</p>
               <p>{financial?.billing_explanation || "-"}</p>
               {result?.recommendation_label === "low_savings" || result?.recommendation_label === "not_recommended" ? (
@@ -437,6 +515,12 @@ export function ComparisonTool() {
               {result?.alternatives?.map((alternative) => (
                 <p key={alternative}>• {alternative}</p>
               ))}
+              {financial?.invoice_preview ? (
+                <p>
+                  Invoice preview: credits ${financial.invoice_preview.utility_credits.toFixed(2)}, payment ${financial.invoice_preview.payment_due.toFixed(2)}, savings $
+                  {financial.invoice_preview.savings.toFixed(2)}
+                </p>
+              ) : null}
             </div>
           </article>
 
@@ -458,6 +542,9 @@ export function ComparisonTool() {
               <p>Confidence score: {result ? `${Math.round(confidenceScore * 100)}%` : "-"}</p>
               {result?.confidence_reason?.map((item) => (
                 <p key={item}>• {item}</p>
+              ))}
+              {result?.assumptions?.map((item) => (
+                <p key={`assumption-${item}`}>Assumption: {item}</p>
               ))}
             </div>
           </article>

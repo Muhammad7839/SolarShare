@@ -25,6 +25,7 @@ from app.ops_store import (
     insert_crm_lead,
 )
 from app.real_data import resolve_location_context
+from app.project_store import init_project_store, load_dashboard_data
 from app.utility_rates import init_utility_rate_store
 from app.schemas import (
     AdminAnalyticsOut,
@@ -52,6 +53,7 @@ async def app_lifespan(_: FastAPI):
     init_contact_store()
     init_ops_store()
     init_utility_rate_store()
+    init_project_store()
     yield
 
 
@@ -349,6 +351,12 @@ def location_resolve(payload: LocationResolveIn, http_request: Request):
         )
     )
     return result
+
+
+@app.get("/dashboard-data")
+def dashboard_data(user_key: str = ""):
+    """Return persisted savings, rollover, and project data for dashboard rendering."""
+    return load_dashboard_data(user_key=user_key)
 
 
 @app.post("/assistant-chat", response_model=AssistantChatOut)

@@ -22,6 +22,9 @@ class UtilityRateResult:
 
 
 SEED_RATES: list[tuple[str, str, float, str]] = [
+    ("*", "NYC", 0.274, "NYC regional average override"),
+    ("*", "Long Island", 0.232, "Long Island regional average override"),
+    ("*", "Upstate", 0.208, "Upstate regional average override"),
     ("Con Edison", "NYC", 0.286, "NYS DPS blended residential estimate"),
     ("PSEG Long Island", "Long Island", 0.236, "PSEG LI blended residential estimate"),
     ("National Grid", "Upstate", 0.214, "National Grid NY blended residential estimate"),
@@ -118,6 +121,24 @@ def get_utility_rate(utility_name: str | None, region: str | None) -> UtilityRat
                     rate_used=float(utility_only_row[0]),
                     rate_source=f"{utility_only_row[1]} (utility fallback)",
                     is_estimated=False,
+                )
+
+        if normalized_region:
+            region_override_row = connection.execute(
+                """
+                SELECT avg_rate_per_kwh, source
+                FROM utility_rates
+                WHERE utility_name = '*' AND region = ?
+                ORDER BY last_updated DESC
+                LIMIT 1
+                """,
+                (normalized_region,),
+            ).fetchone()
+            if region_override_row:
+                return UtilityRateResult(
+                    rate_used=float(region_override_row[0]),
+                    rate_source=f"{region_override_row[1]} (region override)",
+                    is_estimated=True,
                 )
 
     return UtilityRateResult(

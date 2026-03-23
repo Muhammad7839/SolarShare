@@ -39,7 +39,11 @@ Response:
   "project_status": "available" | "waitlist",
   "project_status_reason": string,
   "waitlist_timeline": string | null,
+  "waitlist_position": number | null,
   "matched_project_count": number,
+  "project_name": string | null,
+  "project_capacity": number | null,
+  "remaining_capacity": number | null,
   "financial_breakdown": {
     "credit_value": number,
     "user_payment": number,
@@ -49,7 +53,21 @@ Response:
     "developer_payout": number,
     "rate_used": number,
     "rate_source": string,
-    "is_estimated": boolean
+    "is_estimated": boolean,
+    "system_size_kw": number,
+    "subscription_size_kw": number,
+    "monthly_breakdown": [
+      {
+        "month": string,
+        "production_kwh": number,
+        "usage_kwh": number,
+        "credit_kwh": number,
+        "credit_value": number,
+        "payment": number,
+        "savings": number,
+        "rollover_balance": number
+      }
+    ]
   },
   "confidence_score": number,
   "confidence_reason": [string],
@@ -57,6 +75,7 @@ Response:
   "low_savings_reason": string | null,
   "alternatives": [string],
   "platform_highlights": [string],
+  "assumptions": [string],
   "resolution_confidence": number,
   "fallback_reason": string | null,
   "factor_breakdown": {
@@ -96,6 +115,34 @@ Request:
 {
   "location": string (optional, max 120),
   "zip_code": string (optional, 5-digit or ZIP+4)
+}
+
+GET /dashboard-data?user_key=<token>
+Description:
+Returns persisted subscription, project, and billing-ledger history for dashboard views.
+
+Response:
+{
+  "user_key": string | null,
+  "has_subscription": boolean,
+  "total_savings": number,
+  "rollover_credits": number,
+  "subscription_size_kw": number,
+  "utility": string | null,
+  "region": string | null,
+  "project_info": {
+    "name": string,
+    "capacity_kw": number,
+    "remaining_capacity": number,
+    "billing_model": string
+  } | null,
+  "monthly_savings": [
+    {
+      "month": string,
+      "savings": number,
+      "rollover_balance": number
+    }
+  ]
 }
 
 Response:

@@ -74,6 +74,9 @@ class UserRequest(BaseModel):
 
     location: str = Field(default="", max_length=120)
     zip_code: Optional[str] = Field(default=None, max_length=10)
+    user_key: Optional[str] = Field(default=None, max_length=120)
+    assign_project: bool = False
+    subscription_size_kw: Optional[float] = Field(default=None, gt=0)
     monthly_usage_kwh: float = Field(gt=0)
     priority: Literal[
         "balanced",
@@ -99,6 +102,19 @@ class UserRequest(BaseModel):
             return None
         if not re.fullmatch(r"\d{5}(?:-\d{4})?", normalized):
             raise ValueError("ZIP code must be 5 digits or ZIP+4 format")
+        return normalized
+
+    @field_validator("user_key")
+    @classmethod
+    def normalize_user_key(cls, value: Optional[str]) -> Optional[str]:
+        """Normalize user key token used for subscription persistence."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{2,120}", normalized):
+            raise ValueError("user_key contains unsupported characters")
         return normalized
 
     @model_validator(mode="after")
@@ -184,7 +200,11 @@ class LiveComparisonResponse(BaseModel):
     project_status: str = "available"
     project_status_reason: Optional[str] = None
     waitlist_timeline: Optional[str] = None
+    waitlist_position: Optional[int] = None
     matched_project_count: int = 0
+    project_name: Optional[str] = None
+    project_capacity: Optional[float] = None
+    remaining_capacity: Optional[int] = None
     factor_breakdown: FactorBreakdownSchema
     financial_breakdown: Dict[str, Any] = Field(default_factory=dict)
     confidence_score: float = 0.0
@@ -193,6 +213,7 @@ class LiveComparisonResponse(BaseModel):
     low_savings_reason: Optional[str] = None
     alternatives: List[str] = Field(default_factory=list)
     platform_highlights: List[str] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
 
 
 class LocationResolveIn(BaseModel):

@@ -141,6 +141,7 @@ FALLBACK_COORDS = {
 FALLBACK_ZIP_COORDS = {
     "11757": (40.6862, -73.4664, "Massapequa Park, NY 11757", "NY", "Massapequa Park", "Nassau County"),
     "10001": (40.7506, -73.9972, "New York, NY 10001", "NY", "New York", "New York County"),
+    "11501": (40.7268, -73.6393, "Mineola, NY 11501", "NY", "Mineola", "Nassau County"),
     "07030": (40.744, -74.0324, "Hoboken, NJ 07030", "NJ", "Hoboken", "Hudson County"),
 }
 
@@ -152,6 +153,7 @@ ZIP_SUGGESTION_CANDIDATES = [
     "11746",
     "11743",
     "11590",
+    "11501",
     "11801",
     "11901",
     "14604",
@@ -260,7 +262,7 @@ def _infer_region_and_utility(
     city_key = (city or "").strip().lower()
     zip_prefix = (postal_code or "")[:3]
 
-    if county_key in NYC_COUNTIES or city_key in {"brooklyn", "manhattan", "queens", "staten island", "bronx"}:
+    if county_key in NYC_COUNTIES or city_key in {"new york", "brooklyn", "manhattan", "queens", "staten island", "bronx"}:
         return "NYC", "Con Edison"
     if county_key in LONG_ISLAND_COUNTIES:
         return "Long Island", "PSEG Long Island"

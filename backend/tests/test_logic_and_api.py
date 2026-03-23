@@ -143,6 +143,18 @@ def test_live_comparison_zip_resolution_returns_location_details() -> None:
     assert context["city"]
 
 
+def test_live_comparison_supports_nassau_zip_11501() -> None:
+    response = client.post(
+        "/live-comparison",
+        json={"location": "", "zip_code": "11501", "monthly_usage_kwh": 600, "priority": "balanced"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["market_context"]["state_code"] == "NY"
+    assert payload["market_context"]["region"] == "Long Island"
+    assert payload["market_context"]["utility"] == "PSEG Long Island"
+
+
 def test_live_comparison_includes_financial_breakdown_and_rate_metadata() -> None:
     response = client.post(
         "/live-comparison",
@@ -154,6 +166,9 @@ def test_live_comparison_includes_financial_breakdown_and_rate_metadata() -> Non
     assert financial["credit_value"] > 0
     assert financial["user_payment"] > 0
     assert financial["user_savings"] > 0
+    assert len(financial["monthly_breakdown"]) == 12
+    monthly_savings = {item["savings"] for item in financial["monthly_breakdown"]}
+    assert len(monthly_savings) > 1
     assert financial["platform_revenue"] > 0
     assert financial["developer_payout"] > 0
     assert payload["market_context"]["rate_source"]
@@ -171,6 +186,78 @@ def test_waitlist_status_for_non_ny_region() -> None:
     assert payload["project_status"] == "waitlist"
     assert payload["waitlist_timeline"]
     assert payload["matched_project_count"] == 0
+
+
+def test_rollover_balance_accumulates_when_production_exceeds_usage() -> None:
+    response = client.post(
+        "/live-comparison",
+        json={
+            "location": "",
+            "zip_code": "10001",
+            "monthly_usage_kwh": 100,
+            "priority": "balanced",
+            "subscription_size_kw": 12,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    monthly = payload["financial_breakdown"]["monthly_breakdown"]
+    assert any(item["rollover_balance"] > 0 for item in monthly)
+    assert payload["financial_breakdown"]["rollover_credit_balance"] > 0
+
+
+def test_project_assignment_reduces_available_slots() -> None:
+    user_key = "test_assignment_user"
+    first = client.post(
+        "/live-comparison",
+        json={
+            "location": "",
+            "zip_code": "11757",
+            "monthly_usage_kwh": 650,
+            "priority": "balanced",
+            "assign_project": True,
+            "user_key": user_key,
+        },
+    )
+    second = client.post(
+        "/live-comparison",
+        json={
+            "location": "",
+            "zip_code": "11757",
+            "monthly_usage_kwh": 650,
+            "priority": "balanced",
+            "user_key": user_key,
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["project_name"]
+    assert second.json()["project_name"] == first.json()["project_name"]
+
+
+def test_dashboard_data_returns_persisted_subscription_and_savings() -> None:
+    user_key = "dashboard_user_1"
+    compare = client.post(
+        "/live-comparison",
+        json={
+            "location": "",
+            "zip_code": "10001",
+            "monthly_usage_kwh": 620,
+            "priority": "balanced",
+            "assign_project": True,
+            "user_key": user_key,
+        },
+    )
+    assert compare.status_code == 200
+
+    dashboard = client.get(f"/dashboard-data?user_key={user_key}")
+    assert dashboard.status_code == 200
+    payload = dashboard.json()
+    assert payload["has_subscription"] is True
+    assert payload["subscription_size_kw"] > 0
+    assert payload["project_info"]["name"]
+    assert isinstance(payload["monthly_savings"], list)
 
 
 def test_location_resolve_unresolved_zip_returns_suggestions() -> None:

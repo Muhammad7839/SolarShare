@@ -3,6 +3,7 @@ import {
   AssistantChatRequest,
   AssistantChatResponse,
   ContactInquiry,
+  DashboardDataResponse,
   DemoRequest,
   LiveComparisonResponse,
   LocationResolveRequest,
@@ -121,6 +122,23 @@ export async function sendAssistantChat(payload: AssistantChatRequest): Promise<
   }
 
   return response.json() as Promise<AssistantChatResponse>;
+}
+
+export async function fetchDashboardData(userKey: string): Promise<DashboardDataResponse> {
+  let response: Response;
+  try {
+    const query = encodeURIComponent(userKey.trim());
+    response = await fetch(apiUrl(`/dashboard-data?user_key=${query}`), { method: "GET" });
+  } catch {
+    throw new Error(backendUnavailableMessage());
+  }
+
+  if (!response.ok) {
+    const errorBody = await safeJson(response);
+    throw new Error(resolveErrorMessage(errorBody, "Unable to load dashboard data."));
+  }
+
+  return response.json() as Promise<DashboardDataResponse>;
 }
 
 async function safeJson(response: Response): Promise<unknown> {

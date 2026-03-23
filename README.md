@@ -140,8 +140,18 @@ Use these exact settings:
 ## Product Realism Notes
 - Utility rates are resolved from a seeded `utility_rates` table by utility + region.
 - If no utility-specific rate is available, SolarShare falls back to a documented NY average of `$0.20/kWh`.
-- Live comparison response now returns:
-  - `financial_breakdown` (`credit_value`, `user_payment`, `user_savings`, `platform_revenue`, `developer_payout`)
-  - `confidence_score` and `confidence_reason[]`
-  - `recommendation.reasons[]`
+- Savings model now uses a 12-month generation simulation with seasonality and rollover:
+  - `annual_kwh = monthly_usage_kwh * 12`
+  - `system_size_kw = annual_kwh / 1300`
+  - `production_kwh_month = system_size_kw * irradiance_factor[month] * 30`
+  - `credit_kwh = min(production_kwh_month + rollover_bank_kwh, usage_kwh_month)`
+  - `credit_value = credit_kwh * utility_rate`
+  - `payment = credit_value * (1 - discount_rate)`
+  - `savings = credit_value - payment`
+- Live comparison response returns:
+  - `financial_breakdown.monthly_breakdown[12]` (production, credit, payment, savings, rollover)
+  - `annual_savings`, `average_monthly_savings`, `savings_percent`, `rollover_credit_balance`
+  - project realism fields (`project_name`, `project_capacity`, `remaining_capacity`)
+  - transparent assumptions array (`assumptions[]`)
   - waitlist status and estimated timeline when capacity is unavailable.
+- Dashboard data is available via `GET /dashboard-data?user_key=<session-key>` and returns saved ledger totals, monthly savings history, subscription size, project info, utility, and region.

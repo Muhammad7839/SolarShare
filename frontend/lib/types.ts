@@ -4,6 +4,9 @@ export type PriorityMode = "balanced" | "lowest_cost" | "highest_reliability" | 
 export interface UserRequest {
   location: string;
   zip_code?: string | null;
+  user_key?: string | null;
+  assign_project?: boolean;
+  subscription_size_kw?: number;
   monthly_usage_kwh: number;
   priority: PriorityMode;
 }
@@ -65,7 +68,11 @@ export interface LiveComparisonResponse {
   project_status?: string;
   project_status_reason?: string | null;
   waitlist_timeline?: string | null;
+  waitlist_position?: number | null;
   matched_project_count?: number;
+  project_name?: string | null;
+  project_capacity?: number | null;
+  remaining_capacity?: number | null;
   factor_breakdown?: {
     price: number;
     reliability: number;
@@ -75,6 +82,8 @@ export interface LiveComparisonResponse {
     credit_value: number;
     user_payment: number;
     user_savings: number;
+    annual_savings?: number;
+    average_monthly_savings?: number;
     platform_revenue: number;
     platform_margin: number;
     developer_payout: number;
@@ -82,8 +91,33 @@ export interface LiveComparisonResponse {
     rate_source: string;
     is_estimated: boolean;
     discount_rate: number;
+    system_size_kw?: number;
+    subscription_size_kw?: number;
+    estimated_credit_value?: number;
+    customer_payment?: number;
+    savings_percent?: number;
+    rollover_credit_balance?: number;
+    monthly_breakdown?: Array<{
+      month: string;
+      production_kwh: number;
+      usage_kwh: number;
+      credit_kwh: number;
+      credit_value: number;
+      payment: number;
+      savings: number;
+      rollover_balance: number;
+    }>;
+    billing_model?: string | null;
+    subscription_start_date?: string | null;
+    monthly_generation_share?: number | null;
     billing_explanation: string;
     platform_revenue_explanation: string;
+    invoice_preview?: {
+      utility_credits: number;
+      payment_due: number;
+      savings: number;
+      explanation: string;
+    };
   };
   confidence_score?: number;
   confidence_reason?: string[];
@@ -91,6 +125,28 @@ export interface LiveComparisonResponse {
   low_savings_reason?: string | null;
   alternatives?: string[];
   platform_highlights?: string[];
+  assumptions?: string[];
+}
+
+export interface DashboardDataResponse {
+  user_key?: string | null;
+  has_subscription: boolean;
+  total_savings: number;
+  rollover_credits: number;
+  subscription_size_kw: number;
+  utility?: string | null;
+  region?: string | null;
+  project_info?: {
+    name: string;
+    capacity_kw: number;
+    remaining_capacity: number;
+    billing_model: string;
+  } | null;
+  monthly_savings: Array<{
+    month: string;
+    savings: number;
+    rollover_balance: number;
+  }>;
 }
 
 export interface LocationResolveRequest {
