@@ -8,6 +8,7 @@ from app.main import app
 import app.main as app_main
 from app.schemas import UserRequest
 import app.logic as logic
+from app.simulation_config import ANNUAL_OUTPUT_PER_KW, production_shares_sum
 from app.utility_rates import get_utility_rate
 
 
@@ -171,9 +172,12 @@ def test_live_comparison_includes_financial_breakdown_and_rate_metadata() -> Non
     assert len(monthly_savings) > 1
     assert financial["platform_revenue"] > 0
     assert financial["developer_payout"] > 0
+    assert financial["annual_production_kwh"] > 0
+    assert financial["monthly_share_total"] == production_shares_sum()
     assert payload["market_context"]["rate_source"]
     assert isinstance(payload["market_context"]["rate_is_estimated"], bool)
     assert isinstance(payload["confidence_reason"], list)
+    assert isinstance(payload["assumptions_used"], list)
 
 
 def test_waitlist_status_for_non_ny_region() -> None:
@@ -258,6 +262,7 @@ def test_dashboard_data_returns_persisted_subscription_and_savings() -> None:
     assert payload["subscription_size_kw"] > 0
     assert payload["project_info"]["name"]
     assert isinstance(payload["monthly_savings"], list)
+    assert isinstance(payload["billing_history"], list)
 
 
 def test_location_resolve_unresolved_zip_returns_suggestions() -> None:
@@ -288,6 +293,116 @@ def test_utility_rate_lookup_prefers_utility_table_and_has_ny_fallback() -> None
     fallback_rate = get_utility_rate("Unknown Utility", "Unknown Region")
     assert fallback_rate.rate_used == 0.20
     assert fallback_rate.is_estimated is True
+
+
+def test_generation_model_annual_total_and_monthly_shape_are_consistent() -> None:
+    response = client.post(
+        "/live-comparison",
+        json={"location": "", "zip_code": "11757", "monthly_usage_kwh": 650, "priority": "balanced"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    financial = payload["financial_breakdown"]
+    monthly = financial["monthly_breakdown"]
+
+    simulated_total = round(sum(item["production_kwh"] for item in monthly), 2)
+    expected_total = round(float(financial["subscription_size_kw"]) * ANNUAL_OUTPUT_PER_KW, 2)
+    assert abs(simulated_total - expected_total) <= 1.5
+    assert abs(financial["simulated_production_kwh"] - expected_total) <= 1.5
+    jan = next(item for item in monthly if item["month"] == "Jan")
+    jul = next(item for item in monthly if item["month"] == "Jul")
+    assert jan["production_kwh"] < jul["production_kwh"]
+
+
+def test_auth_dashboard_requires_token_and_uses_authenticated_identity(tmp_path, monkeypatch) -> None:
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+
+    unauthorized = client.get("/dashboard/me")
+    assert unauthorized.status_code == 401
+
+    signup = client.post(
+        "/auth/signup",
+        json={"email": "customer@example.com", "password": "password123"},
+    )
+    assert signup.status_code == 200
+    session = signup.json()
+    token = session["access_token"]
+    user_key = session["user"]["user_identity_key"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    empty_dashboard = client.get("/dashboard/me", headers=headers)
+    assert empty_dashboard.status_code == 200
+    assert empty_dashboard.json()["has_subscription"] is False
+
+    compare = client.post(
+        "/live-comparison",
+        json={
+            "location": "",
+            "zip_code": "10001",
+            "monthly_usage_kwh": 620,
+            "priority": "balanced",
+            "assign_project": True,
+            "user_key": user_key,
+        },
+    )
+    assert compare.status_code == 200
+
+    dashboard = client.get("/dashboard/me", headers=headers)
+    assert dashboard.status_code == 200
+    assert dashboard.json()["has_subscription"] is True
+    assert dashboard.json()["auth_based"] is True
+
+
+def test_invoice_lifecycle_update_and_download(tmp_path, monkeypatch) -> None:
+    ops_db_path = tmp_path / "ops_analytics.sqlite3"
+    monkeypatch.setenv("SOLAR_SHARE_OPS_DB_PATH", str(ops_db_path))
+
+    signup = client.post(
+        "/auth/signup",
+        json={"email": "billing@example.com", "password": "password123"},
+    )
+    assert signup.status_code == 200
+    session = signup.json()
+    token = session["access_token"]
+    user_key = session["user"]["user_identity_key"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    compare = client.post(
+        "/live-comparison",
+        json={
+            "location": "",
+            "zip_code": "11757",
+            "monthly_usage_kwh": 610,
+            "priority": "balanced",
+            "assign_project": True,
+            "user_key": user_key,
+        },
+    )
+    assert compare.status_code == 200
+
+    invoices_response = client.get("/billing/invoices", headers=headers)
+    assert invoices_response.status_code == 200
+    invoices = invoices_response.json()["invoices"]
+    assert len(invoices) >= 1
+    invoice_id = invoices[0]["invoice_id"]
+
+    update_response = client.patch(
+        f"/billing/invoices/{invoice_id}/status",
+        json={"status": "paid"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+
+    updated_invoices = client.get("/billing/invoices", headers=headers).json()["invoices"]
+    target = next(item for item in updated_invoices if item["invoice_id"] == invoice_id)
+    assert target["status"] == "paid"
+    assert target["billing_status"] == "paid"
+
+    download_response = client.get(f"/billing/invoices/{invoice_id}/download", headers=headers)
+    assert download_response.status_code == 200
+    assert download_response.headers.get("content-type") == "application/pdf"
+    assert len(download_response.content) > 100
 
 
 def test_root_returns_api_status_json() -> None:

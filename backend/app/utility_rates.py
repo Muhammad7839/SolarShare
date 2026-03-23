@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_NY_AVERAGE_RATE = 0.20
+from app.simulation_config import DEFAULT_NY_AVERAGE_RATE, DEFAULT_UTILITY_RATE_BY_REGION
+
 DEFAULT_RATE_DB_PATH = str(Path(__file__).resolve().parents[1] / "ops_analytics.sqlite3")
 
 
@@ -22,9 +23,9 @@ class UtilityRateResult:
 
 
 SEED_RATES: list[tuple[str, str, float, str]] = [
-    ("*", "NYC", 0.274, "NYC regional average override"),
-    ("*", "Long Island", 0.232, "Long Island regional average override"),
-    ("*", "Upstate", 0.208, "Upstate regional average override"),
+    ("*", "NYC", DEFAULT_UTILITY_RATE_BY_REGION["NYC"], "NYC regional average override"),
+    ("*", "Long Island", DEFAULT_UTILITY_RATE_BY_REGION["Long Island"], "Long Island regional average override"),
+    ("*", "Upstate", DEFAULT_UTILITY_RATE_BY_REGION["Upstate"], "Upstate regional average override"),
     ("Con Edison", "NYC", 0.286, "NYS DPS blended residential estimate"),
     ("PSEG Long Island", "Long Island", 0.236, "PSEG LI blended residential estimate"),
     ("National Grid", "Upstate", 0.214, "National Grid NY blended residential estimate"),

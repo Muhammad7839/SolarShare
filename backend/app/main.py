@@ -13,10 +13,11 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.assistant_service import build_assistant_reply
+from app.auth import create_access_token, get_current_user, hash_password, verify_password
 from app.contact_store import init_contact_store, insert_contact_inquiry
 from app.ops_store import (
     get_admin_analytics_summary,
@@ -25,7 +26,17 @@ from app.ops_store import (
     insert_crm_lead,
 )
 from app.real_data import resolve_location_context
-from app.project_store import init_project_store, load_dashboard_data
+from app.project_store import (
+    create_user,
+    get_invoice_pdf_for_user_id,
+    get_user_by_email,
+    init_project_store,
+    list_billing_history_for_user_id,
+    load_dashboard_data,
+    load_dashboard_data_for_user,
+    mark_user_login,
+    update_invoice_status_for_user_id,
+)
 from app.utility_rates import init_utility_rate_store
 from app.schemas import (
     AdminAnalyticsOut,
@@ -35,8 +46,13 @@ from app.schemas import (
     AssistantChatOut,
     ContactInquiryIn,
     ContactInquiryOut,
+    AuthLoginIn,
+    AuthSignupIn,
+    AuthTokenOut,
+    AuthUserOut,
     DemoRequestIn,
     DemoRequestOut,
+    InvoiceStatusUpdateIn,
     LocationResolveIn,
     LocationResolveOut,
     UserRequest,
@@ -357,6 +373,68 @@ def location_resolve(payload: LocationResolveIn, http_request: Request):
 def dashboard_data(user_key: str = ""):
     """Return persisted savings, rollover, and project data for dashboard rendering."""
     return load_dashboard_data(user_key=user_key)
+
+
+@app.post("/auth/signup", response_model=AuthTokenOut)
+def auth_signup(payload: AuthSignupIn):
+    """Create customer account and return access token for authenticated dashboard flows."""
+    existing = get_user_by_email(str(payload.email))
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+    user = create_user(email=str(payload.email), password_hash=hash_password(payload.password), role="customer")
+    return create_access_token(user)
+
+
+@app.post("/auth/login", response_model=AuthTokenOut)
+def auth_login(payload: AuthLoginIn):
+    """Authenticate customer credentials and return a signed JWT."""
+    user = get_user_by_email(str(payload.email))
+    if not user or not verify_password(payload.password, str(user.get("password_hash") or "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    mark_user_login(str(user["id"]))
+    return create_access_token(user)
+
+
+@app.get("/auth/me", response_model=AuthUserOut)
+def auth_me(current_user=Depends(get_current_user)):
+    """Return current authenticated user profile derived from Bearer token."""
+    return current_user
+
+
+@app.get("/dashboard/me")
+def dashboard_me(current_user=Depends(get_current_user)):
+    """Return dashboard data bound to authenticated customer identity."""
+    return load_dashboard_data_for_user(user_id=current_user["id"])
+
+
+@app.get("/billing/invoices")
+def billing_invoices(current_user=Depends(get_current_user)):
+    """Return billing lifecycle history for the authenticated customer."""
+    invoices = list_billing_history_for_user_id(current_user["id"])
+    return {"invoices": invoices}
+
+
+@app.patch("/billing/invoices/{invoice_id}/status")
+def billing_invoice_status(invoice_id: str, payload: InvoiceStatusUpdateIn, current_user=Depends(get_current_user)):
+    """Update invoice lifecycle status for authenticated customer records."""
+    updated = update_invoice_status_for_user_id(user_id=current_user["id"], invoice_id=invoice_id, status=payload.status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+    return {"updated": True, "invoice_id": invoice_id, "status": payload.status}
+
+
+@app.get("/billing/invoices/{invoice_id}/download")
+def billing_invoice_download(invoice_id: str, current_user=Depends(get_current_user)):
+    """Download invoice PDF bytes for authenticated customer billing history."""
+    invoice = get_invoice_pdf_for_user_id(user_id=current_user["id"], invoice_id=invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+    filename = f"solarshare-invoice-{invoice['month']}.pdf"
+    return Response(
+        content=bytes(invoice["pdf_blob"]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/assistant-chat", response_model=AssistantChatOut)

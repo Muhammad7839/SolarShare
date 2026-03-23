@@ -56,6 +56,9 @@ Response:
     "is_estimated": boolean,
     "system_size_kw": number,
     "subscription_size_kw": number,
+    "annual_production_kwh": number,
+    "simulated_production_kwh": number,
+    "monthly_share_total": number,
     "monthly_breakdown": [
       {
         "month": string,
@@ -76,6 +79,7 @@ Response:
   "alternatives": [string],
   "platform_highlights": [string],
   "assumptions": [string],
+  "assumptions_used": [string],
   "resolution_confidence": number,
   "fallback_reason": string | null,
   "factor_breakdown": {
@@ -144,6 +148,34 @@ Response:
     }
   ]
 }
+
+POST /auth/signup
+Description:
+Creates a customer account and returns Bearer session token.
+
+POST /auth/login
+Description:
+Authenticates customer credentials and returns Bearer session token.
+
+GET /auth/me
+Description:
+Returns authenticated user profile from Bearer token.
+
+GET /dashboard/me
+Description:
+Returns dashboard data scoped to authenticated user identity.
+
+GET /billing/invoices
+Description:
+Returns persisted invoice lifecycle history for authenticated user.
+
+PATCH /billing/invoices/{invoice_id}/status
+Description:
+Updates invoice lifecycle status (`draft | issued | paid | failed`) for authenticated user.
+
+GET /billing/invoices/{invoice_id}/download
+Description:
+Downloads invoice PDF for authenticated user.
 
 Response:
 {

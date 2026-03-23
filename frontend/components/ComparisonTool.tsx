@@ -2,7 +2,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { fetchLiveComparison, resolveLocation } from "@/lib/api";
+import { fetchLiveComparison, getAuthIdentityKey, resolveLocation } from "@/lib/api";
 import { LiveComparisonResponse, LocationResolveResponse, PriorityMode } from "@/lib/types";
 
 const priorities: Array<{ value: PriorityMode; label: string }> = [
@@ -15,6 +15,10 @@ const priorities: Array<{ value: PriorityMode; label: string }> = [
 const zipSuggestionPool = ["10001", "11201", "11368", "11757", "11746", "11590", "11901"];
 
 function getUserKey(): string {
+  const authIdentity = getAuthIdentityKey();
+  if (authIdentity) {
+    return authIdentity;
+  }
   if (typeof window === "undefined") {
     return "ss-server";
   }
@@ -464,6 +468,11 @@ export function ComparisonTool() {
               {isWaitlist ? <p>Waitlist timeline: {result?.waitlist_timeline || "Estimated availability pending"}</p> : null}
               {result?.waitlist_position ? <p>Waitlist position estimate: #{result.waitlist_position}</p> : null}
               <p>Project detail: {result?.project_status_reason || "-"}</p>
+              {isWaitlist ? (
+                <p className="rounded-lg bg-amber-50 px-2 py-1 text-amber-700">
+                  Capacity is currently full in your matched region. Join waitlist to reserve the next available slot.
+                </p>
+              ) : null}
               <p>Utility baseline: {result ? `$${result.market_context.utility_price_per_kwh.toFixed(3)}/kWh` : "-"}</p>
               <p>Rate source: {result?.market_context.rate_source || "-"}</p>
               <p>Resolution confidence: {result ? `${Math.round(confidenceScore * 100)}%` : "-"}</p>
@@ -471,7 +480,7 @@ export function ComparisonTool() {
               <p>Observed: {result?.market_context.observed_at_utc || "-"}</p>
               {result?.market_context.rate_is_estimated ? (
                 <p className="rounded-lg bg-amber-50 px-2 py-1 text-amber-700">
-                  This estimate uses average utility rates.
+                  Rate is estimated based on New York averages.
                 </p>
               ) : null}
             </div>
@@ -479,12 +488,26 @@ export function ComparisonTool() {
 
           <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Why this recommendation</p>
+            <div className="mt-3 grid gap-3 text-sm text-solarBlue-900/75 dark:text-slate-200 md:grid-cols-3">
+              <article className="rounded-xl bg-solarBlue-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-solarBlue-700">Why this project</p>
+                <p className="mt-1">Auto-selected for region fit and open capacity.</p>
+                <p className="mt-1 text-xs">Distance score: {result ? `${Math.round((result.factor_breakdown?.distance || 0) * 100)}%` : "-"}</p>
+              </article>
+              <article className="rounded-xl bg-solarBlue-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-solarBlue-700">Why utility match</p>
+                <p className="mt-1">Matched to your NY utility region and credit policy.</p>
+                <p className="mt-1 text-xs">
+                  Reliability score: {result ? `${Math.round((result.factor_breakdown?.reliability || 0) * 100)}%` : "-"}
+                </p>
+              </article>
+              <article className="rounded-xl bg-solarBlue-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-solarBlue-700">Why this savings estimate</p>
+                <p className="mt-1">12-month generation and rollover model with discount billing.</p>
+                <p className="mt-1 text-xs">Price score: {result ? `${Math.round((result.factor_breakdown?.price || 0) * 100)}%` : "-"}</p>
+              </article>
+            </div>
             <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
-              <p>Price contribution: {result ? `${Math.round((result.factor_breakdown?.price || 0) * 100)}%` : "-"}</p>
-              <p>
-                Reliability contribution: {result ? `${Math.round((result.factor_breakdown?.reliability || 0) * 100)}%` : "-"}
-              </p>
-              <p>Distance contribution: {result ? `${Math.round((result.factor_breakdown?.distance || 0) * 100)}%` : "-"}</p>
               {result?.recommendation.reasons?.map((reason) => (
                 <p key={reason}>• {reason}</p>
               ))}
@@ -537,13 +560,13 @@ export function ComparisonTool() {
           </article>
 
           <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Confidence Detail</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">How this estimate was calculated</p>
             <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
               <p>Confidence score: {result ? `${Math.round(confidenceScore * 100)}%` : "-"}</p>
               {result?.confidence_reason?.map((item) => (
                 <p key={item}>• {item}</p>
               ))}
-              {result?.assumptions?.map((item) => (
+              {(result?.assumptions_used || result?.assumptions || []).map((item) => (
                 <p key={`assumption-${item}`}>Assumption: {item}</p>
               ))}
             </div>

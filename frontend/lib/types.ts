@@ -126,14 +126,20 @@ export interface LiveComparisonResponse {
   alternatives?: string[];
   platform_highlights?: string[];
   assumptions?: string[];
+  assumptions_used?: string[];
 }
 
 export interface DashboardDataResponse {
   user_key?: string | null;
+  user_id?: string | null;
+  auth_based?: boolean;
   has_subscription: boolean;
   total_savings: number;
+  year_to_date_savings?: number;
   rollover_credits: number;
   subscription_size_kw: number;
+  subscription_start_date?: string | null;
+  monthly_generation_share?: number | null;
   utility?: string | null;
   region?: string | null;
   project_info?: {
@@ -146,6 +152,22 @@ export interface DashboardDataResponse {
     month: string;
     savings: number;
     rollover_balance: number;
+  }>;
+  billing_history?: Array<{
+    invoice_id: string;
+    month: string;
+    status: "draft" | "issued" | "paid" | "failed";
+    billing_status: "draft" | "issued" | "paid" | "failed";
+    utility_credits: number;
+    payment_due: number;
+    savings: number;
+    rollover_balance: number;
+    explanation: string;
+    created_at: string;
+    issued_at?: string | null;
+    paid_at?: string | null;
+    failed_at?: string | null;
+    download_path: string;
   }>;
 }
 
@@ -196,4 +218,23 @@ export interface DemoRequest {
   email: string;
   organization?: string | null;
   message: string;
+}
+
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: string;
+  user_identity_key: string;
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+  user: AuthUser;
 }

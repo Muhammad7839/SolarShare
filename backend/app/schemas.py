@@ -214,6 +214,7 @@ class LiveComparisonResponse(BaseModel):
     alternatives: List[str] = Field(default_factory=list)
     platform_highlights: List[str] = Field(default_factory=list)
     assumptions: List[str] = Field(default_factory=list)
+    assumptions_used: List[str] = Field(default_factory=list)
 
 
 class LocationResolveIn(BaseModel):
@@ -444,3 +445,56 @@ class ContactInquiryOut(BaseModel):
 
     inquiry_id: str
     received: bool
+
+
+class AuthSignupIn(BaseModel):
+    """Signup payload for customer authentication and dashboard identity."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=120)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value: str) -> str:
+        """Enforce baseline password strength requirements."""
+        normalized = value.strip()
+        if len(normalized) < 8:
+            raise ValueError("password must be at least 8 characters long")
+        return normalized
+
+
+class AuthLoginIn(BaseModel):
+    """Login payload for exchanging credentials for JWT access."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=120)
+
+
+class AuthUserOut(BaseModel):
+    """Authenticated user profile returned by auth endpoints."""
+
+    id: str
+    email: EmailStr
+    role: str
+    user_identity_key: str
+
+
+class AuthTokenOut(BaseModel):
+    """Bearer token envelope consumed by frontend auth state."""
+
+    access_token: str
+    token_type: str
+    expires_at: str
+    user: AuthUserOut
+
+
+class InvoiceStatusUpdateIn(BaseModel):
+    """Invoice lifecycle update payload."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    status: Literal["draft", "issued", "paid", "failed"]

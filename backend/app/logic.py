@@ -16,6 +16,13 @@ from app.project_store import (
 )
 from app.real_data import build_live_market_snapshot
 from app.schemas import UserRequest
+from app.simulation_config import (
+    ANNUAL_OUTPUT_PER_KW,
+    DEFAULT_DISCOUNT_RATE,
+    DEFAULT_PLATFORM_MARGIN,
+    MONTHLY_PRODUCTION_SHARES,
+    production_shares_sum,
+)
 
 
 LOCATION_DISTANCE_MULTIPLIERS = {
@@ -26,22 +33,6 @@ LOCATION_DISTANCE_MULTIPLIERS = {
     "suburban": 1.05,
     "rural": 1.15,
 }
-
-IRRADIANCE_FACTORS = [
-    ("Jan", 0.6),
-    ("Feb", 0.7),
-    ("Mar", 0.9),
-    ("Apr", 1.1),
-    ("May", 1.2),
-    ("Jun", 1.3),
-    ("Jul", 1.3),
-    ("Aug", 1.2),
-    ("Sep", 1.0),
-    ("Oct", 0.8),
-    ("Nov", 0.6),
-    ("Dec", 0.5),
-]
-
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     """Clamp numeric values to a bounded range."""
@@ -56,18 +47,29 @@ def _demo_mode_enabled() -> bool:
 
 def _platform_margin_rate() -> float:
     """Resolve platform margin within the allowed 2-5 percent range."""
-    raw = (os.getenv("SOLAR_SHARE_PLATFORM_MARGIN_RATE") or "0.03").strip()
+    raw = (os.getenv("SOLAR_SHARE_PLATFORM_MARGIN_RATE") or str(DEFAULT_PLATFORM_MARGIN)).strip()
     try:
         parsed = float(raw)
     except ValueError:
-        parsed = 0.03
+        parsed = DEFAULT_PLATFORM_MARGIN
     return round(_clamp(parsed, 0.02, 0.05), 4)
 
 
-def _estimate_system_size_kw(monthly_usage_kwh: float) -> float:
-    """Estimate subscription system size from annual usage using NY production factor."""
+def _discount_rate() -> float:
+    """Resolve discount rate from env while keeping supported 5-20% range."""
+    raw = (os.getenv("SOLAR_SHARE_DEFAULT_DISCOUNT_RATE") or str(DEFAULT_DISCOUNT_RATE)).strip()
+    try:
+        parsed = float(raw)
+    except ValueError:
+        parsed = DEFAULT_DISCOUNT_RATE
+    return round(_clamp(parsed, 0.05, 0.20), 4)
+
+
+def _estimate_system_size_kw(monthly_usage_kwh: float, annual_output_per_kw: float = ANNUAL_OUTPUT_PER_KW) -> float:
+    """Estimate subscription system size from annual usage using configured NY production factor."""
     annual_kwh = monthly_usage_kwh * 12.0
-    return round(max(annual_kwh / 1300.0, 0.1), 3)
+    output_factor = max(annual_output_per_kw, 1.0)
+    return round(max(annual_kwh / output_factor, 0.1), 3)
 
 
 def _simulate_generation_billing(
@@ -76,19 +78,25 @@ def _simulate_generation_billing(
     subscription_size_kw: float,
     discount_rate: float,
 ) -> Dict[str, Any]:
-    """Run a 12-month generation simulation with rollover-credit behavior."""
+    """Run a 12-month generation simulation using annual production shares and rollover behavior."""
     monthly_breakdown: List[Dict[str, float | str]] = []
     rollover_bank_kwh = 0.0
     annual_credit_value = 0.0
     annual_payment = 0.0
     annual_savings = 0.0
+    annual_production_kwh = max(subscription_size_kw * ANNUAL_OUTPUT_PER_KW, 0.0)
+    monthly_share_total = production_shares_sum()
+    monthly_labels: list[str] = []
+    total_production_simulated = 0.0
 
-    for month, irradiance_factor in IRRADIANCE_FACTORS:
-        production_kwh = subscription_size_kw * irradiance_factor * 30.0
+    for month, monthly_share in MONTHLY_PRODUCTION_SHARES:
+        monthly_labels.append(month)
+        production_kwh = annual_production_kwh * monthly_share
         usage_kwh = monthly_usage_kwh
         usable_kwh = production_kwh + rollover_bank_kwh
         credit_kwh = min(usable_kwh, usage_kwh)
         rollover_bank_kwh = max(usable_kwh - usage_kwh, 0.0)
+        total_production_simulated += production_kwh
 
         credit_value = credit_kwh * utility_rate
         payment = credit_value * (1.0 - discount_rate)
@@ -124,6 +132,10 @@ def _simulate_generation_billing(
         "customer_payment": round(annual_payment, 2),
         "rollover_credit_balance": round(rollover_bank_kwh, 2),
         "savings_percent": round(savings_percent, 2),
+        "annual_production_kwh": round(annual_production_kwh, 2),
+        "simulated_production_kwh": round(total_production_simulated, 2),
+        "monthly_share_total": monthly_share_total,
+        "months_modeled": monthly_labels,
     }
 
 
@@ -184,7 +196,9 @@ def _build_assumptions(snapshot, is_rate_estimated: bool, discount_rate: float) 
     """Return user-facing assumptions for transparency and auditability."""
     assumptions = [
         f"{int(discount_rate * 100)}% discount applied",
+        f"annual output factor {int(ANNUAL_OUTPUT_PER_KW)} kWh per kW-year",
         "seasonal solar production modeled",
+        f"monthly production shares total {production_shares_sum()}",
         "monthly rollover credits carried forward",
     ]
     if is_rate_estimated:
@@ -341,7 +355,7 @@ def get_live_comparison(request: UserRequest):
     if not ranked:
         raise ValueError("No live options are currently available")
 
-    discount_rate = 0.10
+    discount_rate = _discount_rate()
     margin_rate = _platform_margin_rate()
 
     estimated_subscription_size_kw = _estimate_system_size_kw(request.monthly_usage_kwh)
@@ -561,6 +575,9 @@ def get_live_comparison(request: UserRequest):
             "customer_payment": annual_payment,
             "monthly_breakdown": simulation["monthly_breakdown"],
             "annual_savings": annual_savings,
+            "annual_production_kwh": simulation["annual_production_kwh"],
+            "simulated_production_kwh": simulation["simulated_production_kwh"],
+            "monthly_share_total": simulation["monthly_share_total"],
             "billing_model": billing_model,
             "subscription_start_date": subscription_start_date,
             "monthly_generation_share": monthly_generation_share,
@@ -584,4 +601,5 @@ def get_live_comparison(request: UserRequest):
             "Smart matching engine",
         ],
         "assumptions": assumptions,
+        "assumptions_used": assumptions,
     }
