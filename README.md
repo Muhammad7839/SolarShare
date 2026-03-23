@@ -109,7 +109,7 @@ Backend (`backend/.env`): copy from `backend/.env.example` if needed.
 Use these exact settings:
 - Root Directory: `backend`
 - Build Command: `pip install -r requirements.txt`
-- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port 10000 --proxy-headers`
+- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port 10000`
 - Health Check Path: `/health`
 
 Important env var on Render:
@@ -124,7 +124,7 @@ Use these exact settings:
 
 ## Troubleshooting
 - Render ASGI error `Attribute "app" not found in module "main"`:
-  - Use `uvicorn app.main:app --host 0.0.0.0 --port 10000 --proxy-headers`.
+  - Use `uvicorn app.main:app --host 0.0.0.0 --port 10000`.
 - Frontend `Failed to fetch`:
   - Confirm backend is running and `NEXT_PUBLIC_API_BASE_URL` is correct.
 - CORS errors:

@@ -11,39 +11,14 @@ import {
 } from "@/lib/types";
 
 const defaultHeaders = { "Content-Type": "application/json" };
-
-function localDevFallbackApiBase(): string {
-  if (process.env.NODE_ENV === "production") {
-    return "";
-  }
-
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") {
-      return `http://${host}:8000`;
-    }
-  }
-
-  return "http://127.0.0.1:8000";
-}
-
-function apiBaseUrl(): string {
-  const configuredApiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim();
-  if (configuredApiBase) {
-    return configuredApiBase.replace(/\/+$/, "");
-  }
-
-  const fallbackApiBase = localDevFallbackApiBase().trim();
-  if (fallbackApiBase) {
-    return fallbackApiBase.replace(/\/+$/, "");
-  }
-
-  throw new Error("NEXT_PUBLIC_API_BASE_URL is required in production.");
-}
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
 
 function apiUrl(path: string): string {
+  if (!API_BASE) {
+    throw new Error("NEXT_PUBLIC_API_BASE_URL is not set.");
+  }
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${apiBaseUrl()}${normalizedPath}`;
+  return `${API_BASE}${normalizedPath}`;
 }
 
 function backendUnavailableMessage(): string {

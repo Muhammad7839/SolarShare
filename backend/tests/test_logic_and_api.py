@@ -145,7 +145,7 @@ def test_live_comparison_zip_resolution_returns_location_details() -> None:
 def test_root_returns_api_status_json() -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "SolarShare API running"}
+    assert response.json() == {"status": "ok"}
 
 
 def test_admin_routes_require_password_header(monkeypatch) -> None:

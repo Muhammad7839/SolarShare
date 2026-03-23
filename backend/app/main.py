@@ -86,31 +86,15 @@ _IDEMPOTENCY_KEY_LOCKS: Dict[Tuple[str, str], threading.Lock] = {}
 _IDEMPOTENCY_LOCK = threading.Lock()
 
 
-def _get_cors_origins() -> List[str]:
-    """Read allowed CORS origins from env, with local dev defaults."""
-    configured_origins = os.getenv("SOLAR_SHARE_CORS_ORIGINS")
-    if configured_origins:
-        return [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://*.vercel.app",
+]
 
-    return [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-
-
-def _get_cors_origin_regex() -> Optional[str]:
-    """Read optional CORS regex from env, with LAN-safe local default."""
-    configured_regex = (os.getenv("SOLAR_SHARE_CORS_ORIGIN_REGEX") or "").strip()
-    if configured_regex:
-        return configured_regex
-    return r"^https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$"
-
-
-# CORS: allow frontend apps to talk to this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_get_cors_origins(),
-    allow_origin_regex=_get_cors_origin_regex(),
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -267,8 +251,8 @@ def health_check():
 
 @app.get("/")
 def root_status():
-    """Backend root endpoint intentionally returns API status only."""
-    return {"message": "SolarShare API running"}
+    """Backend root endpoint for health checks from local and deployment tooling."""
+    return {"status": "ok"}
 
 
 @app.get("/admin")

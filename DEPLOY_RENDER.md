@@ -10,7 +10,7 @@ This project is deployed as:
 Use these exact values:
 - Root Directory: `backend`
 - Build Command: `pip install -r requirements.txt`
-- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port 10000 --proxy-headers`
+- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port 10000`
 - Health Check Path: `/health`
 
 Required backend environment variable:
