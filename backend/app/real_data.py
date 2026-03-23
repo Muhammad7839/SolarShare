@@ -14,6 +14,7 @@ import httpx
 
 from app.data import BASELINE_UTILITY_PRICE
 from app.models import EnergyOption
+from app.utility_rates import get_utility_rate
 
 
 @dataclass
@@ -26,9 +27,13 @@ class LiveMarketSnapshot:
     state_code: Optional[str]
     postal_code: Optional[str]
     country_code: Optional[str]
+    region: Optional[str]
+    utility: Optional[str]
     latitude: float
     longitude: float
     utility_price_per_kwh: float
+    utility_rate_source: str
+    utility_rate_is_estimated: bool
     avg_shortwave_radiation: float
     avg_cloud_cover_pct: float
     data_sources: List[str]
@@ -139,6 +144,26 @@ FALLBACK_ZIP_COORDS = {
     "07030": (40.744, -74.0324, "Hoboken, NJ 07030", "NJ", "Hoboken", "Hudson County"),
 }
 
+ZIP_SUGGESTION_CANDIDATES = [
+    "10001",
+    "11201",
+    "11368",
+    "11757",
+    "11746",
+    "11743",
+    "11590",
+    "11801",
+    "11901",
+    "14604",
+    "12207",
+    "13202",
+    "14202",
+]
+
+NYC_COUNTIES = {"bronx", "kings", "new york", "queens", "richmond"}
+LONG_ISLAND_COUNTIES = {"nassau", "suffolk"}
+UPSTATE_UTILITIES = ["National Grid", "NYSEG", "RG&E", "Central Hudson"]
+
 STATE_RATE_FALLBACK = {
     "NY": 0.241,
     "CA": 0.305,
@@ -190,6 +215,12 @@ def _network_enabled() -> bool:
     return True
 
 
+def _demo_mode_enabled() -> bool:
+    """Enable deterministic demo-friendly scenarios for product demos."""
+    raw_value = (os.getenv("DEMO_MODE") or os.getenv("SOLAR_SHARE_DEMO_MODE") or "").strip().lower()
+    return raw_value in {"1", "true", "yes", "on"}
+
+
 def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Compute great-circle distance between two coordinate pairs."""
     r = 3958.8
@@ -203,6 +234,60 @@ def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     """Clamp numeric values to a safe range."""
     return max(minimum, min(maximum, value))
+
+
+def _normalize_county(county: Optional[str]) -> str:
+    """Normalize county text for consistent region and utility mapping."""
+    if not county:
+        return ""
+    normalized = county.strip().lower()
+    if normalized.endswith(" county"):
+        normalized = normalized[:-7].strip()
+    return normalized
+
+
+def _infer_region_and_utility(
+    state_code: Optional[str],
+    county: Optional[str],
+    city: Optional[str],
+    postal_code: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Infer New York market region and utility from resolved geography."""
+    if state_code != "NY":
+        return None, None
+
+    county_key = _normalize_county(county)
+    city_key = (city or "").strip().lower()
+    zip_prefix = (postal_code or "")[:3]
+
+    if county_key in NYC_COUNTIES or city_key in {"brooklyn", "manhattan", "queens", "staten island", "bronx"}:
+        return "NYC", "Con Edison"
+    if county_key in LONG_ISLAND_COUNTIES:
+        return "Long Island", "PSEG Long Island"
+
+    if zip_prefix in {"146", "147"}:
+        return "Upstate", "RG&E"
+    if zip_prefix in {"125", "126"}:
+        return "Upstate", "Central Hudson"
+    if zip_prefix in {"137", "138", "139", "148", "149"}:
+        return "Upstate", "NYSEG"
+
+    utility = UPSTATE_UTILITIES[hash((county_key, city_key, zip_prefix)) % len(UPSTATE_UTILITIES)]
+    return "Upstate", utility
+
+
+def _suggest_closest_zip_codes(zip_code: Optional[str]) -> list[str]:
+    """Suggest closest ZIP candidates when the provided ZIP appears unresolved."""
+    raw_zip = (zip_code or "").strip()
+    if not raw_zip:
+        return []
+    if not raw_zip.isdigit() or len(raw_zip) != 5:
+        return ZIP_SUGGESTION_CANDIDATES[:3]
+
+    target = int(raw_zip)
+    candidates = set(ZIP_SUGGESTION_CANDIDATES) | set(FALLBACK_ZIP_COORDS.keys())
+    sorted_candidates = sorted(candidates, key=lambda candidate: abs(int(candidate) - target))
+    return sorted_candidates[:3]
 
 
 def _extract_city(address: dict[str, Any]) -> Optional[str]:
@@ -256,6 +341,8 @@ def _fallback_reason_for_source(source: str) -> Optional[str]:
         return "Network disabled; fallback location used."
     if "fallback-default" in source:
         return "No precise location match found; default fallback applied."
+    if "fallback-unresolved" in source:
+        return "Location could not be resolved with confidence."
     if "fallback-zip" in source:
         return "ZIP fallback map used for deterministic resolution."
     if "fallback" in source:
@@ -301,18 +388,33 @@ def _default_location(location: str, zip_code: Optional[str]) -> ResolvedLocatio
                 fallback_reason="Keyword fallback used for location resolution.",
             )
 
+    if _demo_mode_enabled():
+        return ResolvedLocation(
+            latitude=40.7506,
+            longitude=-73.9972,
+            display_name="New York, NY 10001",
+            state_code="NY",
+            city="New York",
+            county="New York County",
+            postal_code=normalized_zip or "10001",
+            country_code="US",
+            source="geocode:fallback-default:demo",
+            confidence=0.82,
+            fallback_reason="Demo mode applied a deterministic New York scenario.",
+        )
+
     return ResolvedLocation(
-        latitude=40.7128,
-        longitude=-74.0060,
-        display_name="New York, NY",
-        state_code="NY",
-        city="New York",
-        county="New York County",
+        latitude=39.8283,
+        longitude=-98.5795,
+        display_name="Unresolved U.S. location",
+        state_code=None,
+        city=None,
+        county=None,
         postal_code=normalized_zip or None,
         country_code="US",
-        source="geocode:fallback-default",
-        confidence=0.68,
-        fallback_reason="Default fallback location used.",
+        source="geocode:fallback-unresolved",
+        confidence=0.54,
+        fallback_reason="Location could not be resolved with confidence.",
     )
 
 
@@ -488,21 +590,34 @@ def _fetch_solar_conditions(latitude: float, longitude: float) -> tuple[float, f
         return 430.0, 35.0, source
 
 
-def _fetch_utility_rate(state_code: Optional[str]) -> tuple[float, str, Optional[str]]:
-    """Fetch latest U.S. retail electricity price from EIA v2 API."""
-    if state_code:
-        cached = _cache_get("utility-rate", state_code)
-        if cached:
-            utility_rate, source, period = cached
-            return utility_rate, f"{source}:cache", period
+def _fetch_utility_rate(
+    state_code: Optional[str],
+    utility_name: Optional[str],
+    region: Optional[str],
+) -> tuple[float, str, Optional[str], bool]:
+    """Fetch utility rates with NY utility table priority and state fallback elsewhere."""
+    cache_key = f"{state_code or 'na'}|{utility_name or 'na'}|{region or 'na'}"
+    cached = _cache_get("utility-rate", cache_key)
+    if cached:
+        utility_rate, source, period, is_estimated = cached
+        return utility_rate, f"{source}:cache", period, is_estimated
+
+    if state_code == "NY":
+        rate_result = get_utility_rate(utility_name=utility_name, region=region)
+        source = f"rate:utility-table:{rate_result.rate_source}"
+        payload = (rate_result.rate_used, source, None, rate_result.is_estimated)
+        _cache_set("utility-rate", cache_key, payload, RATE_CACHE_TTL_SECONDS)
+        return payload
 
     if not state_code:
-        return BASELINE_UTILITY_PRICE, "rate:fallback-no-state", None
+        payload = (BASELINE_UTILITY_PRICE, "rate:fallback-no-state", None, True)
+        _cache_set("utility-rate", cache_key, payload, RATE_CACHE_TTL_SECONDS)
+        return payload
     if not _network_enabled():
         utility_rate = STATE_RATE_FALLBACK.get(state_code, BASELINE_UTILITY_PRICE)
-        source = "rate:fallback-offline"
-        _cache_set("utility-rate", state_code, (utility_rate, source, None), RATE_CACHE_TTL_SECONDS)
-        return utility_rate, source, None
+        payload = (utility_rate, "rate:fallback-offline", None, True)
+        _cache_set("utility-rate", cache_key, payload, RATE_CACHE_TTL_SECONDS)
+        return payload
 
     api_key = os.getenv("SOLAR_SHARE_EIA_API_KEY", "DEMO_KEY")
     url = "https://api.eia.gov/v2/electricity/retail-sales/data/"
@@ -524,9 +639,9 @@ def _fetch_utility_rate(state_code: Optional[str]) -> tuple[float, str, Optional
         records = payload.get("response", {}).get("data", [])
         if not records:
             utility_rate = STATE_RATE_FALLBACK.get(state_code, BASELINE_UTILITY_PRICE)
-            source = "rate:fallback-empty"
-            _cache_set("utility-rate", state_code, (utility_rate, source, None), RATE_CACHE_TTL_SECONDS)
-            return utility_rate, source, None
+            payload = (utility_rate, "rate:fallback-empty", None, True)
+            _cache_set("utility-rate", cache_key, payload, RATE_CACHE_TTL_SECONDS)
+            return payload
 
         value = float(records[0].get("price"))
         period = records[0].get("period")
@@ -536,30 +651,41 @@ def _fetch_utility_rate(state_code: Optional[str]) -> tuple[float, str, Optional
         if value > 3.0:
             value = value / 100.0
         value = _clamp(value, 0.08, 0.6)
-        source = "rate:eia"
-        _cache_set("utility-rate", state_code, (value, source, period), RATE_CACHE_TTL_SECONDS)
-        return value, source, period
+        payload = (value, "rate:eia", period, False)
+        _cache_set("utility-rate", cache_key, payload, RATE_CACHE_TTL_SECONDS)
+        return payload
     except Exception:
         utility_rate = STATE_RATE_FALLBACK.get(state_code, BASELINE_UTILITY_PRICE)
-        source = "rate:fallback-error"
-        _cache_set("utility-rate", state_code, (utility_rate, source, None), RATE_CACHE_TTL_SECONDS)
-        return utility_rate, source, None
+        payload = (utility_rate, "rate:fallback-error", None, True)
+        _cache_set("utility-rate", cache_key, payload, RATE_CACHE_TTL_SECONDS)
+        return payload
 
 
 def resolve_location_context(location: str, zip_code: Optional[str]) -> dict[str, Any]:
     """Resolve location identifiers into normalized geography metadata for preview flows."""
     resolved = _fetch_geocode(location, zip_code)
+    region, utility = _infer_region_and_utility(
+        state_code=resolved.state_code,
+        county=resolved.county,
+        city=resolved.city,
+        postal_code=resolved.postal_code,
+    )
+    is_unresolved = resolved.source.startswith("geocode:fallback-unresolved")
     return {
         "resolved_location": resolved.display_name,
         "city": resolved.city,
         "county": resolved.county,
         "state_code": resolved.state_code,
         "postal_code": resolved.postal_code,
+        "region": region,
+        "utility": utility,
         "country_code": resolved.country_code,
         "latitude": round(resolved.latitude, 4),
         "longitude": round(resolved.longitude, 4),
         "confidence": resolved.confidence,
         "using_fallback": "fallback" in resolved.source,
+        "resolution_status": "unresolved" if is_unresolved else "resolved",
+        "suggested_zip_codes": _suggest_closest_zip_codes(zip_code) if is_unresolved else [],
         "source": resolved.source,
     }
 
@@ -567,11 +693,21 @@ def resolve_location_context(location: str, zip_code: Optional[str]) -> dict[str
 def build_live_market_snapshot(location: str, zip_code: Optional[str]) -> LiveMarketSnapshot:
     """Build live market inputs and dynamic local option candidates."""
     resolved = _fetch_geocode(location, zip_code)
+    region, utility = _infer_region_and_utility(
+        state_code=resolved.state_code,
+        county=resolved.county,
+        city=resolved.city,
+        postal_code=resolved.postal_code,
+    )
     latitude = resolved.latitude
     longitude = resolved.longitude
     state_code = resolved.state_code
     avg_radiation, avg_cloud, solar_source = _fetch_solar_conditions(latitude, longitude)
-    utility_rate, rate_source, rate_period = _fetch_utility_rate(state_code)
+    utility_rate, rate_source, rate_period, utility_rate_is_estimated = _fetch_utility_rate(
+        state_code=state_code,
+        utility_name=utility,
+        region=region,
+    )
 
     solar_factor = _clamp(avg_radiation / 500.0, 0.72, 1.18)
     cloud_factor = _clamp(avg_cloud / 100.0, 0.0, 1.0)
@@ -605,11 +741,24 @@ def build_live_market_snapshot(location: str, zip_code: Optional[str]) -> LiveMa
             )
         )
 
+    if _demo_mode_enabled() and not options:
+        options = [
+            EnergyOption(
+                id=801,
+                provider_name="SolarShare Optimized Community Solar",
+                base_price_per_kwh=round(max(utility_rate * 0.86, 0.08), 3),
+                distance_miles=8.5,
+                reliability_score=0.94,
+                time_of_use_modifier=0.01,
+                utility_plan_name="SolarShare Demo Optimized Allocation",
+            )
+        ]
+
     sources = [resolved.source, solar_source, rate_source]
     source_urls = [
         "https://nominatim.openstreetmap.org/",
         "https://open-meteo.com/",
-        "https://www.eia.gov/opendata/",
+        "https://www.eia.gov/opendata/" if not rate_source.startswith("rate:utility-table") else "local:utility_rates",
     ]
     using_fallback = any("fallback" in source for source in sources)
 
@@ -620,9 +769,13 @@ def build_live_market_snapshot(location: str, zip_code: Optional[str]) -> LiveMa
         state_code=resolved.state_code,
         postal_code=resolved.postal_code,
         country_code=resolved.country_code,
+        region=region,
+        utility=utility,
         latitude=round(latitude, 4),
         longitude=round(longitude, 4),
         utility_price_per_kwh=round(utility_rate, 3),
+        utility_rate_source=rate_source,
+        utility_rate_is_estimated=utility_rate_is_estimated,
         utility_rate_period=rate_period,
         avg_shortwave_radiation=round(avg_radiation, 1),
         avg_cloud_cover_pct=round(avg_cloud, 1),

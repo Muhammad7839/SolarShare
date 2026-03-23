@@ -3,6 +3,7 @@
 ## Project Overview
 SolarShare is a full-stack app with a FastAPI backend and a Next.js frontend.
 The backend is API-only, and the frontend is the full user-facing web interface.
+The product flow now includes utility-rate realism, confidence reasoning, waitlist handling, and SolarShare revenue transparency.
 
 ## Tech Stack
 - Backend: FastAPI, Uvicorn, Python
@@ -103,6 +104,10 @@ NEXT_PUBLIC_API_BASE_URL=https://solarshare-api.onrender.com
 
 Backend (`backend/.env`): copy from `backend/.env.example` if needed.
 
+Additional realism flags:
+- `DEMO_MODE=true` forces deterministic New York demo scenarios.
+- `SOLAR_SHARE_PLATFORM_MARGIN_RATE=0.03` controls platform margin (clamped to 2%-5%).
+
 ## Deployment (Render + Vercel)
 
 ### Backend on Render
@@ -131,3 +136,12 @@ Use these exact settings:
   - Ensure your Vercel domain is included in `SOLAR_SHARE_CORS_ORIGINS` on Render.
 - Port already in use:
   - Stop old processes and rerun (`./stop.sh` on Mac/Linux).
+
+## Product Realism Notes
+- Utility rates are resolved from a seeded `utility_rates` table by utility + region.
+- If no utility-specific rate is available, SolarShare falls back to a documented NY average of `$0.20/kWh`.
+- Live comparison response now returns:
+  - `financial_breakdown` (`credit_value`, `user_payment`, `user_savings`, `platform_revenue`, `developer_payout`)
+  - `confidence_score` and `confidence_reason[]`
+  - `recommendation.reasons[]`
+  - waitlist status and estimated timeline when capacity is unavailable.

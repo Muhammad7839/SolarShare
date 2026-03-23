@@ -137,6 +137,7 @@ class ScoredOptionSchema(BaseModel):
 class RecommendationResponse(BaseModel):
     recommended_option: ScoredOptionSchema
     reason: str
+    reasons: List[str] = Field(default_factory=list)
 
 
 class FactorBreakdownSchema(BaseModel):
@@ -156,10 +157,14 @@ class MarketContextSchema(BaseModel):
     state_code: Optional[str]
     postal_code: Optional[str]
     country_code: Optional[str]
+    region: Optional[str] = None
+    utility: Optional[str] = None
     latitude: float
     longitude: float
     utility_price_per_kwh: float
     utility_rate_period: Optional[str]
+    rate_source: str = "NY average fallback"
+    rate_is_estimated: bool = True
     avg_shortwave_radiation: float
     avg_cloud_cover_pct: float
     data_sources: List[str]
@@ -176,7 +181,18 @@ class LiveComparisonResponse(BaseModel):
     market_context: MarketContextSchema
     resolution_confidence: float
     fallback_reason: Optional[str]
+    project_status: str = "available"
+    project_status_reason: Optional[str] = None
+    waitlist_timeline: Optional[str] = None
+    matched_project_count: int = 0
     factor_breakdown: FactorBreakdownSchema
+    financial_breakdown: Dict[str, Any] = Field(default_factory=dict)
+    confidence_score: float = 0.0
+    confidence_reason: List[str] = Field(default_factory=list)
+    recommendation_label: Literal["recommended", "low_savings", "not_recommended"] = "recommended"
+    low_savings_reason: Optional[str] = None
+    alternatives: List[str] = Field(default_factory=list)
+    platform_highlights: List[str] = Field(default_factory=list)
 
 
 class LocationResolveIn(BaseModel):
@@ -227,6 +243,10 @@ class LocationResolveOut(BaseModel):
     longitude: float
     confidence: float
     using_fallback: bool
+    resolution_status: str = "resolved"
+    suggested_zip_codes: List[str] = Field(default_factory=list)
+    region: Optional[str] = None
+    utility: Optional[str] = None
     source: str
 
 

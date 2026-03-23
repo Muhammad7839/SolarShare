@@ -30,6 +30,7 @@ export interface ScoredOption {
 export interface RecommendationPayload {
   recommended_option: ScoredOption;
   reason: string;
+  reasons?: string[];
 }
 
 export interface MarketContext {
@@ -39,10 +40,14 @@ export interface MarketContext {
   state_code?: string | null;
   postal_code?: string | null;
   country_code?: string | null;
+  region?: string | null;
+  utility?: string | null;
   latitude: number;
   longitude: number;
   utility_price_per_kwh: number;
   utility_rate_period?: string | null;
+  rate_source?: string;
+  rate_is_estimated?: boolean;
   avg_shortwave_radiation: number;
   avg_cloud_cover_pct: number;
   data_sources: string[];
@@ -57,11 +62,35 @@ export interface LiveComparisonResponse {
   market_context: MarketContext;
   resolution_confidence?: number;
   fallback_reason?: string | null;
+  project_status?: string;
+  project_status_reason?: string | null;
+  waitlist_timeline?: string | null;
+  matched_project_count?: number;
   factor_breakdown?: {
     price: number;
     reliability: number;
     distance: number;
   };
+  financial_breakdown?: {
+    credit_value: number;
+    user_payment: number;
+    user_savings: number;
+    platform_revenue: number;
+    platform_margin: number;
+    developer_payout: number;
+    rate_used: number;
+    rate_source: string;
+    is_estimated: boolean;
+    discount_rate: number;
+    billing_explanation: string;
+    platform_revenue_explanation: string;
+  };
+  confidence_score?: number;
+  confidence_reason?: string[];
+  recommendation_label?: "recommended" | "low_savings" | "not_recommended";
+  low_savings_reason?: string | null;
+  alternatives?: string[];
+  platform_highlights?: string[];
 }
 
 export interface LocationResolveRequest {
@@ -76,10 +105,14 @@ export interface LocationResolveResponse {
   state_code?: string | null;
   postal_code?: string | null;
   country_code?: string | null;
+  region?: string | null;
+  utility?: string | null;
   latitude: number;
   longitude: number;
   confidence: number;
   using_fallback: boolean;
+  resolution_status?: string;
+  suggested_zip_codes?: string[];
   source: string;
 }
 

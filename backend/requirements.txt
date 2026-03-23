@@ -47,3 +47,6 @@ uvloop==0.22.1; platform_system != "Windows"
 watchfiles==1.1.1
 websockets==15.0.1
 pytest==8.4.2
+SQLAlchemy==2.0.44
+alembic==1.17.2
+PyJWT==2.10.1

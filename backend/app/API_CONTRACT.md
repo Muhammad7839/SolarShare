@@ -25,7 +25,7 @@ Returns `401` when missing or incorrect.
 
 POST /live-comparison
 Description:
-Returns ranked options, recommendation, and live market context in a single payload.
+Returns ranked options, recommendation, savings realism, confidence explanations, and live market context in a single payload.
 Rate limited per client IP.
 
 Response:
@@ -33,8 +33,30 @@ Response:
   "options": [ScoredOptionSchema],
   "recommendation": {
     "recommended_option": ScoredOptionSchema,
-    "reason": string
+    "reason": string,
+    "reasons": [string]
   },
+  "project_status": "available" | "waitlist",
+  "project_status_reason": string,
+  "waitlist_timeline": string | null,
+  "matched_project_count": number,
+  "financial_breakdown": {
+    "credit_value": number,
+    "user_payment": number,
+    "user_savings": number,
+    "platform_revenue": number,
+    "platform_margin": number,
+    "developer_payout": number,
+    "rate_used": number,
+    "rate_source": string,
+    "is_estimated": boolean
+  },
+  "confidence_score": number,
+  "confidence_reason": [string],
+  "recommendation_label": "recommended" | "low_savings" | "not_recommended",
+  "low_savings_reason": string | null,
+  "alternatives": [string],
+  "platform_highlights": [string],
   "resolution_confidence": number,
   "fallback_reason": string | null,
   "factor_breakdown": {
@@ -49,10 +71,14 @@ Response:
     "state_code": string | null,
     "postal_code": string | null,
     "country_code": string | null,
+    "region": string | null,
+    "utility": string | null,
     "latitude": number,
     "longitude": number,
     "utility_price_per_kwh": number,
     "utility_rate_period": string | null,
+    "rate_source": string,
+    "rate_is_estimated": boolean,
     "avg_shortwave_radiation": number,
     "avg_cloud_cover_pct": number,
     "data_sources": [string],
@@ -79,11 +105,15 @@ Response:
   "county": string | null,
   "state_code": string | null,
   "postal_code": string | null,
+  "region": string | null,
+  "utility": string | null,
   "country_code": string | null,
   "latitude": number,
   "longitude": number,
   "confidence": number,
   "using_fallback": boolean,
+  "resolution_status": "resolved" | "unresolved",
+  "suggested_zip_codes": [string],
   "source": string
 }
 

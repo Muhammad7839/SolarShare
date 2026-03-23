@@ -8,6 +8,7 @@ from app.main import app
 import app.main as app_main
 from app.schemas import UserRequest
 import app.logic as logic
+from app.utility_rates import get_utility_rate
 
 
 client = TestClient(app)
@@ -140,6 +141,66 @@ def test_live_comparison_zip_resolution_returns_location_details() -> None:
     assert context["postal_code"] in ("11757", None)
     assert context["state_code"] == "NY"
     assert context["city"]
+
+
+def test_live_comparison_includes_financial_breakdown_and_rate_metadata() -> None:
+    response = client.post(
+        "/live-comparison",
+        json={"location": "New York City", "monthly_usage_kwh": 650, "priority": "balanced"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    financial = payload["financial_breakdown"]
+    assert financial["credit_value"] > 0
+    assert financial["user_payment"] > 0
+    assert financial["user_savings"] > 0
+    assert financial["platform_revenue"] > 0
+    assert financial["developer_payout"] > 0
+    assert payload["market_context"]["rate_source"]
+    assert isinstance(payload["market_context"]["rate_is_estimated"], bool)
+    assert isinstance(payload["confidence_reason"], list)
+
+
+def test_waitlist_status_for_non_ny_region() -> None:
+    response = client.post(
+        "/live-comparison",
+        json={"location": "", "zip_code": "07030", "monthly_usage_kwh": 620, "priority": "balanced"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["project_status"] == "waitlist"
+    assert payload["waitlist_timeline"]
+    assert payload["matched_project_count"] == 0
+
+
+def test_location_resolve_unresolved_zip_returns_suggestions() -> None:
+    response = client.post("/location-resolve", json={"location": "", "zip_code": "99999"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["resolution_status"] == "unresolved"
+    assert len(payload["suggested_zip_codes"]) >= 1
+
+
+def test_demo_mode_keeps_live_comparison_available(monkeypatch) -> None:
+    monkeypatch.setenv("DEMO_MODE", "true")
+    response = client.post(
+        "/live-comparison",
+        json={"location": "Unknown Place", "zip_code": "99999", "monthly_usage_kwh": 500, "priority": "balanced"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["project_status"] == "available"
+    assert payload["options"]
+
+
+def test_utility_rate_lookup_prefers_utility_table_and_has_ny_fallback() -> None:
+    coned_rate = get_utility_rate("Con Edison", "NYC")
+    assert coned_rate.rate_used > 0.2
+    assert coned_rate.is_estimated is False
+
+    fallback_rate = get_utility_rate("Unknown Utility", "Unknown Region")
+    assert fallback_rate.rate_used == 0.20
+    assert fallback_rate.is_estimated is True
 
 
 def test_root_returns_api_status_json() -> None:

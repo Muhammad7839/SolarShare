@@ -1,5 +1,7 @@
 """Business logic for scoring, ranking, and selecting clean energy options."""
 
+import os
+
 from app.data import ENERGY_OPTIONS, BASELINE_UTILITY_PRICE
 from app.models import EnergyOption
 from app.models import ScoredOption
@@ -15,6 +17,72 @@ LOCATION_DISTANCE_MULTIPLIERS = {
     "suburban": 1.05,
     "rural": 1.15,
 }
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    """Clamp numeric values to a bounded range."""
+    return max(minimum, min(maximum, value))
+
+
+def _demo_mode_enabled() -> bool:
+    """Return true when demo mode is explicitly enabled."""
+    raw_value = (os.getenv("DEMO_MODE") or os.getenv("SOLAR_SHARE_DEMO_MODE") or "").strip().lower()
+    return raw_value in {"1", "true", "yes", "on"}
+
+
+def _platform_margin_rate() -> float:
+    """Resolve platform margin within the allowed 2-5 percent range."""
+    raw = (os.getenv("SOLAR_SHARE_PLATFORM_MARGIN_RATE") or "0.03").strip()
+    try:
+        parsed = float(raw)
+    except ValueError:
+        parsed = 0.03
+    return round(_clamp(parsed, 0.02, 0.05), 4)
+
+
+def _build_recommendation_reasons(snapshot) -> list[str]:
+    """Build human-readable recommendation reasons for trust and explainability."""
+    reasons: list[str] = []
+    if snapshot.avg_shortwave_radiation >= 420:
+        reasons.append("High solar production in your region supports stronger credit generation.")
+    if snapshot.utility:
+        reasons.append(f"Utility supports community solar credits: {snapshot.utility}.")
+    reasons.append("10% discount available on utility bill credits in this scenario.")
+    if snapshot.region == "Long Island":
+        reasons.append("Long Island projects typically deliver strong matching for local load profiles.")
+    if snapshot.region == "NYC":
+        reasons.append("NYC billing compatibility improves credit application reliability.")
+    return reasons
+
+
+def _build_confidence_details(request: UserRequest, snapshot, project_status: str) -> tuple[float, list[str]]:
+    """Return confidence score and rationale for the displayed recommendation."""
+    reasons: list[str] = []
+    score = snapshot.resolution_confidence
+
+    requested_zip = (request.zip_code or "").strip()
+    resolved_zip = (snapshot.postal_code or "").strip()
+    if requested_zip and resolved_zip.startswith(requested_zip[:5]):
+        reasons.append("Exact ZIP match")
+        score += 0.03
+    elif requested_zip:
+        reasons.append("ZIP resolved through fallback mapping")
+        score -= 0.02
+
+    if snapshot.utility_rate_is_estimated:
+        reasons.append("Savings based on estimated rate")
+        score -= 0.12
+    else:
+        reasons.append("Utility data verified")
+        score += 0.04
+
+    if project_status == "waitlist":
+        reasons.append("Project availability is pending, so savings certainty is lower")
+        score -= 0.08
+    else:
+        reasons.append("Active project capacity is available")
+
+    return round(_clamp(score, 0.0, 1.0), 3), reasons
 
 
 def get_location_distance_multiplier(location: str) -> float:
@@ -188,11 +256,49 @@ def get_live_comparison(request: UserRequest):
     if not ranked:
         raise ValueError("No live options are currently available")
 
+    project_status = "available"
+    project_reason = "Active project capacity is available"
+    waitlist_timeline = None
+    matched_project_count = len(ranked)
+    if not _demo_mode_enabled() and snapshot.state_code != "NY":
+        project_status = "waitlist"
+        project_reason = "No active capacity in your resolved region yet"
+        waitlist_timeline = "Estimated availability: 6-10 weeks"
+        matched_project_count = 0
+
+    discount_rate = 0.10
+    margin_rate = _platform_margin_rate()
+    credit_value = round(request.monthly_usage_kwh * snapshot.utility_price_per_kwh, 2) if project_status == "available" else 0.0
+    user_payment = round(credit_value * (1.0 - discount_rate), 2)
+    user_savings = round(credit_value - user_payment, 2)
+    platform_revenue = round(credit_value * margin_rate, 2)
+    developer_payout = round(credit_value - user_savings - platform_revenue, 2)
+
+    recommendation_label = "recommended"
+    low_savings_reason = None
+    alternatives: list[str] = []
+    if user_savings <= 0:
+        recommendation_label = "not_recommended"
+        low_savings_reason = "Discounted credit value does not exceed expected bill impact in this scenario."
+        alternatives = ["Join waitlist for a closer project", "Share recent utility bill for finer sizing"]
+    elif user_savings < 15:
+        recommendation_label = "low_savings"
+        low_savings_reason = "Savings are positive but low because usage-credit alignment is limited."
+        alternatives = ["Try a higher usage month profile", "Select a project with higher production allocation"]
+
+    confidence_score, confidence_reason = _build_confidence_details(
+        request=request,
+        snapshot=snapshot,
+        project_status=project_status,
+    )
+    recommendation_reasons = _build_recommendation_reasons(snapshot)
+
     return {
         "options": ranked,
         "recommendation": {
             "recommended_option": ranked[0],
             "reason": _reason_for_priority(request.priority),
+            "reasons": recommendation_reasons,
         },
         "market_context": {
             "resolved_location": snapshot.resolved_location,
@@ -201,10 +307,14 @@ def get_live_comparison(request: UserRequest):
             "state_code": snapshot.state_code,
             "postal_code": snapshot.postal_code,
             "country_code": snapshot.country_code,
+            "region": snapshot.region,
+            "utility": snapshot.utility,
             "latitude": snapshot.latitude,
             "longitude": snapshot.longitude,
             "utility_price_per_kwh": snapshot.utility_price_per_kwh,
             "utility_rate_period": snapshot.utility_rate_period,
+            "rate_source": snapshot.utility_rate_source,
+            "rate_is_estimated": snapshot.utility_rate_is_estimated,
             "avg_shortwave_radiation": snapshot.avg_shortwave_radiation,
             "avg_cloud_cover_pct": snapshot.avg_cloud_cover_pct,
             "data_sources": snapshot.data_sources,
@@ -214,5 +324,33 @@ def get_live_comparison(request: UserRequest):
         },
         "resolution_confidence": snapshot.resolution_confidence,
         "fallback_reason": snapshot.fallback_reason,
+        "project_status": project_status,
+        "matched_project_count": matched_project_count,
+        "waitlist_timeline": waitlist_timeline,
+        "project_status_reason": project_reason,
         "factor_breakdown": _build_factor_breakdown(ranked[0]),
+        "financial_breakdown": {
+            "credit_value": credit_value,
+            "user_payment": user_payment,
+            "user_savings": user_savings,
+            "platform_revenue": platform_revenue,
+            "platform_margin": round(margin_rate, 4),
+            "developer_payout": developer_payout,
+            "rate_used": snapshot.utility_price_per_kwh,
+            "rate_source": snapshot.utility_rate_source,
+            "is_estimated": snapshot.utility_rate_is_estimated,
+            "discount_rate": discount_rate,
+            "billing_explanation": "Estimated savings assume a 10% discount on utility bill credits. Example: $100 credits -> $90 payment -> $10 savings.",
+            "platform_revenue_explanation": "How SolarShare makes money: a 2-5% platform margin is retained from credited value while customers receive discounted credits.",
+        },
+        "confidence_score": confidence_score,
+        "confidence_reason": confidence_reason,
+        "recommendation_label": recommendation_label,
+        "low_savings_reason": low_savings_reason,
+        "alternatives": alternatives,
+        "platform_highlights": [
+            "Best project automatically selected",
+            "Optimized credit allocation",
+            "Smart matching engine",
+        ],
     }

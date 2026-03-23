@@ -25,6 +25,7 @@ from app.ops_store import (
     insert_crm_lead,
 )
 from app.real_data import resolve_location_context
+from app.utility_rates import init_utility_rate_store
 from app.schemas import (
     AdminAnalyticsOut,
     AnalyticsEventIn,
@@ -50,6 +51,7 @@ async def app_lifespan(_: FastAPI):
     """Initialize persistent stores once when API process starts."""
     init_contact_store()
     init_ops_store()
+    init_utility_rate_store()
     yield
 
 
@@ -281,6 +283,28 @@ def live_comparison(request: UserRequest, http_request: Request):
     _enforce_rate_limit(http_request, "live-comparison", LIVE_COMPARISON_RATE_LIMIT)
     try:
         payload = get_live_comparison(request)
+        if payload.get("project_status") == "waitlist":
+            logger.warning(
+                json.dumps(
+                    {
+                        "event": "no_project_capacity",
+                        "request_id": getattr(http_request.state, "request_id", None),
+                        "state_code": payload.get("market_context", {}).get("state_code"),
+                        "region": payload.get("market_context", {}).get("region"),
+                    }
+                )
+            )
+        if payload.get("recommendation_label") in {"low_savings", "not_recommended"}:
+            logger.warning(
+                json.dumps(
+                    {
+                        "event": "savings_edge_case",
+                        "request_id": getattr(http_request.state, "request_id", None),
+                        "label": payload.get("recommendation_label"),
+                        "reason": payload.get("low_savings_reason"),
+                    }
+                )
+            )
         logger.info(
             json.dumps(
                 {
@@ -302,6 +326,17 @@ def location_resolve(payload: LocationResolveIn, http_request: Request):
     """Resolve and normalize location metadata for pre-submit UX previews."""
     _enforce_rate_limit(http_request, "location-resolve", LIVE_COMPARISON_RATE_LIMIT)
     result = resolve_location_context(payload.location, payload.zip_code)
+    if result.get("resolution_status") == "unresolved":
+        logger.warning(
+            json.dumps(
+                {
+                    "event": "unresolved_location",
+                    "request_id": getattr(http_request.state, "request_id", None),
+                    "zip_code": payload.zip_code,
+                    "location": payload.location,
+                }
+            )
+        )
     logger.info(
         json.dumps(
             {

@@ -12,6 +12,8 @@ const priorities: Array<{ value: PriorityMode; label: string }> = [
   { value: "closest_distance", label: "Closest Distance" }
 ];
 
+const zipSuggestionPool = ["10001", "11201", "11368", "11757", "11746", "11590", "11901"];
+
 export function ComparisonTool() {
   const [step, setStep] = useState(1);
   const [location, setLocation] = useState("");
@@ -25,6 +27,9 @@ export function ComparisonTool() {
   const [result, setResult] = useState<LiveComparisonResponse | null>(null);
 
   const recommendation = result?.recommendation.recommended_option;
+  const financial = result?.financial_breakdown;
+  const confidenceScore = result?.confidence_score ?? result?.resolution_confidence ?? 0;
+  const isWaitlist = result?.project_status === "waitlist";
   const chartData = useMemo(() => {
     if (!result) {
       return [];
@@ -47,6 +52,18 @@ export function ComparisonTool() {
     return parsed;
   }
 
+  function zipSuggestionsForInput(input: string): string[] {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      return zipSuggestionPool.slice(0, 3);
+    }
+    if (!/^\d+$/.test(trimmed)) {
+      return zipSuggestionPool.slice(0, 3);
+    }
+    const numeric = Number(trimmed.slice(0, 5));
+    return [...zipSuggestionPool].sort((a, b) => Math.abs(Number(a) - numeric) - Math.abs(Number(b) - numeric)).slice(0, 3);
+  }
+
   function validateStep(stepNumber: number): boolean {
     const safeLocation = location.trim();
     const safeZip = zipCode.trim();
@@ -57,7 +74,8 @@ export function ComparisonTool() {
         return false;
       }
       if (safeZip && !/^\d{5}(?:-\d{4})?$/.test(safeZip)) {
-        setError("ZIP code must be 5 digits or ZIP+4 format.");
+        const suggestions = zipSuggestionsForInput(safeZip).join(", ");
+        setError(`ZIP code must be 5 digits or ZIP+4 format. Try: ${suggestions}`);
         return false;
       }
     }
@@ -175,9 +193,15 @@ export function ComparisonTool() {
                     {locationPreview.postal_code || ""}
                   </p>
                   <p className="mt-1">
+                    Utility region: {locationPreview.region || "n/a"} | Utility: {locationPreview.utility || "n/a"}
+                  </p>
+                  <p className="mt-1">
                     Confidence: {Math.round((locationPreview.confidence || 0) * 100)}% | Mode:{" "}
                     {locationPreview.using_fallback ? "Fallback" : "Live"}
                   </p>
+                  {locationPreview.resolution_status === "unresolved" && locationPreview.suggested_zip_codes?.length ? (
+                    <p className="mt-1">Suggested ZIPs: {locationPreview.suggested_zip_codes.join(", ")}</p>
+                  ) : null}
                 </article>
               ) : null}
 
@@ -291,8 +315,16 @@ export function ComparisonTool() {
           <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Top Recommendation</p>
             <h4 className="mt-2 text-xl font-semibold text-solarBlue-900 dark:text-slate-100">
-              {recommendation ? recommendation.option.provider_name : "Run a scenario to see your best fit"}
+              {recommendation ? "Best project automatically selected" : "Run a scenario to see your best fit"}
             </h4>
+            <p className="mt-1 text-sm font-semibold text-solarBlue-700 dark:text-slate-200">
+              {recommendation ? recommendation.option.provider_name : "-"}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+              <span className="rounded-full bg-solarBlue-50 px-2 py-1 text-solarBlue-700">No upfront cost</span>
+              <span className="rounded-full bg-solarBlue-50 px-2 py-1 text-solarBlue-700">Cancel anytime</span>
+              <span className="rounded-full bg-solarBlue-50 px-2 py-1 text-solarBlue-700">No installation</span>
+            </div>
             <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
               <p>
                 Monthly Cost: <strong className="metric-value">{recommendation ? `$${recommendation.monthly_cost.toFixed(2)}` : "-"}</strong>
@@ -304,8 +336,20 @@ export function ComparisonTool() {
                 </strong>
               </p>
               <p>
+                Estimated Monthly Savings:{" "}
+                <strong className="metric-value metric-accent-green">{financial ? `$${financial.user_savings.toFixed(2)}` : "-"}</strong>
+              </p>
+              <p>
+                Estimated Annual Savings:{" "}
+                <strong className="metric-value metric-accent-green">{financial ? `$${(financial.user_savings * 12).toFixed(2)}` : "-"}</strong>
+              </p>
+              <p>
                 Reliability:{" "}
                 <strong className="metric-value">{recommendation ? `${Math.round(recommendation.option.reliability_score * 100)}%` : "-"}</strong>
+              </p>
+              <p>
+                CO2 avoided estimate:{" "}
+                <strong className="metric-value">{financial ? `${Math.round((financial.credit_value / 0.2) * 0.7)} lb/year` : "-"}</strong>
               </p>
             </div>
           </article>
@@ -340,10 +384,22 @@ export function ComparisonTool() {
                 Region: {result?.market_context.city || "-"}, {result?.market_context.county || "-"}, {result?.market_context.state_code || "-"}{" "}
                 {result?.market_context.postal_code || ""}
               </p>
+              <p>Utility region: {result?.market_context.region || "-"}</p>
+              <p>Utility: {result?.market_context.utility || "-"}</p>
+              <p>Project status: {result?.project_status || "-"}</p>
+              <p>Matched projects: {result?.matched_project_count ?? "-"}</p>
+              {isWaitlist ? <p>Waitlist timeline: {result?.waitlist_timeline || "Estimated availability pending"}</p> : null}
+              <p>Project detail: {result?.project_status_reason || "-"}</p>
               <p>Utility baseline: {result ? `$${result.market_context.utility_price_per_kwh.toFixed(3)}/kWh` : "-"}</p>
-              <p>Resolution confidence: {result ? `${Math.round((result.resolution_confidence || 0) * 100)}%` : "-"}</p>
+              <p>Rate source: {result?.market_context.rate_source || "-"}</p>
+              <p>Resolution confidence: {result ? `${Math.round(confidenceScore * 100)}%` : "-"}</p>
               <p>Fallback reason: {result?.fallback_reason || "None"}</p>
               <p>Observed: {result?.market_context.observed_at_utc || "-"}</p>
+              {result?.market_context.rate_is_estimated ? (
+                <p className="rounded-lg bg-amber-50 px-2 py-1 text-amber-700">
+                  Rate is estimated based on New York averages.
+                </p>
+              ) : null}
             </div>
           </article>
 
@@ -355,6 +411,54 @@ export function ComparisonTool() {
                 Reliability contribution: {result ? `${Math.round((result.factor_breakdown?.reliability || 0) * 100)}%` : "-"}
               </p>
               <p>Distance contribution: {result ? `${Math.round((result.factor_breakdown?.distance || 0) * 100)}%` : "-"}</p>
+              {result?.recommendation.reasons?.map((reason) => (
+                <p key={reason}>• {reason}</p>
+              ))}
+              {result?.platform_highlights?.map((item) => (
+                <p key={item}>• {item}</p>
+              ))}
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Billing & Revenue Breakdown</p>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
+              <p>Credit value: {financial ? `$${financial.credit_value.toFixed(2)}` : "-"}</p>
+              <p>User payment: {financial ? `$${financial.user_payment.toFixed(2)}` : "-"}</p>
+              <p>User savings: {financial ? `$${financial.user_savings.toFixed(2)}` : "-"}</p>
+              <p>Platform revenue: {financial ? `$${financial.platform_revenue.toFixed(2)}` : "-"}</p>
+              <p>Developer payout: {financial ? `$${financial.developer_payout.toFixed(2)}` : "-"}</p>
+              <p>Platform margin: {financial ? `${Math.round(financial.platform_margin * 100)}%` : "-"}</p>
+              <p>{financial?.platform_revenue_explanation || "How SolarShare makes money"}</p>
+              <p>{financial?.billing_explanation || "-"}</p>
+              {result?.recommendation_label === "low_savings" || result?.recommendation_label === "not_recommended" ? (
+                <p className="rounded-lg bg-amber-50 px-2 py-1 text-amber-700">{result.low_savings_reason || "Savings are currently limited."}</p>
+              ) : null}
+              {result?.alternatives?.map((alternative) => (
+                <p key={alternative}>• {alternative}</p>
+              ))}
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Billing Flow</p>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
+              <p>Step 1: Solar generates credits</p>
+              <p>Step 2: Utility applies credits</p>
+              <p>Step 3: You pay discounted amount</p>
+              <p>Billing model: {isWaitlist ? "Pending assignment" : "Consolidated or separate depending on utility/project"}</p>
+              <p>Dual billing: utility bill and solar subscription bill arrive separately when required.</p>
+              <p>Consolidated billing: utility statement includes community-solar credit adjustments.</p>
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-solarBlue-100 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-solarBlue-900/60 dark:text-slate-300">Confidence Detail</p>
+            <div className="mt-3 grid gap-2 text-sm text-solarBlue-900/75 dark:text-slate-200">
+              <p>Confidence score: {result ? `${Math.round(confidenceScore * 100)}%` : "-"}</p>
+              {result?.confidence_reason?.map((item) => (
+                <p key={item}>• {item}</p>
+              ))}
             </div>
           </article>
         </div>
