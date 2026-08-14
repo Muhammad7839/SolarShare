@@ -1,178 +1,93 @@
 # SolarShare
 
-## Project Overview
-SolarShare is a full-stack app with a FastAPI backend and a Next.js frontend.
-The backend is API-only, and the frontend is the full user-facing web interface.
-The product flow now includes utility-rate realism, confidence reasoning, waitlist handling, and SolarShare revenue transparency.
+Award-winning clean-energy decision platform built with Next.js and FastAPI.
 
-## Tech Stack
-- Backend: FastAPI, Uvicorn, Python
-- Frontend: Next.js, React, TypeScript
-- Deployment: Render (backend) + Vercel (frontend)
+**First Prize — 2025 PSEG Long Island Innovation Challenge**
 
-## Project Structure
+[Live web app](https://solarshare-web.vercel.app) · [API health](https://solarshare-api.onrender.com/health) · [Deployment guide](./DEPLOY_RENDER.md)
+
+SolarShare helps households explore solar options, estimate value, organize customer and billing workflows, and move from interest to an informed next step. The repository demonstrates a production-shaped full-stack system rather than a single landing page.
+
+## Engineering proof
+
+| Area | Implementation |
+| --- | --- |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, Framer Motion |
+| Backend | FastAPI with typed validation and modular API routes |
+| Security | JWT authentication, roles, rate limiting, and idempotency controls |
+| Business workflows | Analytics, billing, CRM, contacts, utility rates, and PDF invoices |
+| Persistence | Configurable persistent stores for application data |
+| Quality | Pytest logic/API coverage plus frontend production builds |
+| Delivery | Vercel frontend and Render API |
+
+## Product capabilities
+
+- Solar opportunity and utility-rate workflows
+- Authentication and role-aware access
+- Customer, contact, CRM, and billing operations
+- Analytics and decision-support views
+- PDF invoice generation
+- Assistant workflow for guided product interaction
+- API safeguards for rate limits and repeat requests
+
+## Architecture
+
+```mermaid
+flowchart LR
+  User[Web user] --> UI[Next.js app]
+  UI --> API[FastAPI service]
+  API --> Store[(Persistent data)]
+  API --> Docs[PDF invoices]
+  API --> Rates[Utility-rate data]
+```
+
+## Repository map
+
 ```text
 SolarShare/
-├── backend/        # FastAPI API service
-├── frontend/       # Next.js UI
-├── run.sh          # One-command local run (Mac/Linux)
-├── run.bat         # One-command local run (Windows)
-└── stop.sh         # Stop local dev processes (Mac/Linux)
+├── backend/          FastAPI routes, services, persistence, and tests
+├── frontend/         Next.js application
+├── DEPLOY_RENDER.md  Deployment and environment guidance
+└── README.md         Product and engineering overview
 ```
 
-## Quick Start (Beginner Friendly)
+## Run locally
 
-### 1) Clone the repository
-```bash
-git clone <YOUR_REPO_URL>
-cd SolarShare
-```
+### Backend
 
-### 2) One-time setup
-
-Backend (Mac/Linux):
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+uvicorn main:app --reload
 ```
 
-Backend (Windows Command Prompt):
-```bat
-cd backend
-py -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
+### Frontend
 
-Frontend (Mac/Linux + Windows):
-```bash
-cd ../frontend
-cp .env.example .env.local
-npm install
-```
-
-Windows Command Prompt copy command:
-```bat
-copy .env.example .env.local
-```
-
-### 3) Run the full app with one command
-
-Mac/Linux:
-```bash
-./run.sh
-```
-
-Windows Command Prompt:
-```bat
-run.bat
-```
-
-Local URLs:
-- Frontend: `http://localhost:3000`
-- Backend: `http://127.0.0.1:8000`
-
-## Manual Run (Fallback)
-Use two terminals.
-
-Terminal 1 (backend):
-```bash
-cd backend
-source venv/bin/activate
-python main.py
-```
-
-Terminal 2 (frontend):
 ```bash
 cd frontend
+npm install
 npm run dev
 ```
 
-## Environment Variables
+Point the frontend API configuration at the local FastAPI service. See `DEPLOY_RENDER.md` for deployment-specific variables.
 
-Frontend (`frontend/.env.local`):
+## Test and verify
+
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+cd backend && pytest
+cd frontend && npm run build
 ```
 
-Production frontend value should be your Render backend URL, for example:
-```bash
-NEXT_PUBLIC_API_BASE_URL=https://solarshare-api.onrender.com
-```
+## Scope and limitations
 
-Backend (`backend/.env`): copy from `backend/.env.example` if needed.
+SolarShare is a portfolio and competition project. Estimates and utility-rate data should be independently validated before anyone makes a financial or installation decision. A production launch would also require jurisdiction-specific compliance, monitored integrations, security review, and audited billing behavior.
 
-Additional realism flags:
-- `DEMO_MODE=true` forces deterministic New York demo scenarios.
-- `SOLAR_SHARE_PLATFORM_MARGIN_RATE=0.03` controls platform margin (clamped to 2%-5%).
+## Recognition
 
-## Deployment (Render + Vercel)
+SolarShare received first prize at the 2025 PSEG Long Island Innovation Challenge at Farmingdale State College.
 
-### Backend on Render
-Use these exact settings:
-- Root Directory: `backend`
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port 10000`
-- Health Check Path: `/health`
+## Author
 
-Important env var on Render:
-- `SOLAR_SHARE_CORS_ORIGINS=https://<your-vercel-domain>,http://localhost:3000,http://127.0.0.1:3000`
-
-### Frontend on Vercel
-Use these exact settings:
-- Root Directory: `frontend`
-- Framework: Next.js
-- Environment Variable:
-  - `NEXT_PUBLIC_API_BASE_URL=https://<your-render-backend-domain>`
-
-## Troubleshooting
-- Render ASGI error `Attribute "app" not found in module "main"`:
-  - Use `uvicorn app.main:app --host 0.0.0.0 --port 10000`.
-- Frontend `Failed to fetch`:
-  - Confirm backend is running and `NEXT_PUBLIC_API_BASE_URL` is correct.
-- CORS errors:
-  - Ensure your Vercel domain is included in `SOLAR_SHARE_CORS_ORIGINS` on Render.
-- Port already in use:
-  - Stop old processes and rerun (`./stop.sh` on Mac/Linux).
-
-## Product Realism Notes
-- Utility rates are resolved from a seeded `utility_rates` table by utility + region.
-- If no utility-specific rate is available, SolarShare falls back to a documented NY average of `$0.20/kWh`.
-- Savings model now uses a 12-month generation simulation with seasonality and rollover:
-  - `annual_kwh = monthly_usage_kwh * 12`
-  - `system_size_kw = annual_kwh / annual_output_per_kw`
-  - `annual_production_kwh = system_size_kw * annual_output_per_kw`
-  - `production_kwh_month = annual_production_kwh * monthly_share[month]` (shares sum to `1.0`)
-  - `credit_kwh = min(production_kwh_month + rollover_bank_kwh, usage_kwh_month)`
-  - `credit_value = credit_kwh * utility_rate`
-  - `payment = credit_value * (1 - discount_rate)`
-  - `savings = credit_value - payment`
-- Live comparison response returns:
-  - `financial_breakdown.monthly_breakdown[12]` (production, credit, payment, savings, rollover)
-  - `annual_savings`, `average_monthly_savings`, `savings_percent`, `rollover_credit_balance`
-  - project realism fields (`project_name`, `project_capacity`, `remaining_capacity`)
-  - transparent assumptions arrays (`assumptions[]`, `assumptions_used[]`)
-  - waitlist status and estimated timeline when capacity is unavailable.
-- Authenticated dashboard data is available via `GET /dashboard/me` (Bearer token).
-- Legacy compatibility endpoint remains available via `GET /dashboard-data?user_key=<session-key>`.
-- Billing lifecycle APIs:
-  - `GET /billing/invoices`
-  - `PATCH /billing/invoices/{invoice_id}/status` (`draft|issued|paid|failed`)
-  - `GET /billing/invoices/{invoice_id}/download`
-- Payment rails:
-  - `POST /billing/invoices/{invoice_id}/pay` charges through provider adapters.
-  - Default provider is `mock`; optional Stripe integration via `STRIPE_SECRET_KEY`.
-  - Payment metadata (`payment_provider`, `payment_transaction_id`, `payment_status_message`) is stored per invoice.
-- Session management:
-  - `POST /auth/refresh` rotates refresh tokens.
-  - `POST /auth/logout` revokes current session.
-  - `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `POST /auth/sessions/revoke-others` support device/session control.
-- RBAC and moderation:
-  - Roles: `customer`, `developer`, `admin`.
-  - Customer status changes create moderation requests.
-  - Admin reviews via `/admin/billing/status-requests` and `/admin/billing/status-requests/{id}/review`.
-- Utility rate refresh pipeline:
-  - `POST /admin/utility-rates/refresh` or cron-safe `POST /internal/utility-rates/refresh`
-  - refresh jobs logged in `utility_rate_refresh_jobs` with timestamps and record counts.
+Built by [Muhammad Imran](https://github.com/Muhammad7839) — [portfolio](https://muhammad7839.github.io/portfolio) · [LinkedIn](https://www.linkedin.com/in/muhammadimran-swe/)
