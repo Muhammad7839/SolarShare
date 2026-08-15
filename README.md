@@ -4,7 +4,7 @@ Award-winning clean-energy decision platform built with Next.js and FastAPI.
 
 **First Prize — 2025 PSEG Long Island Innovation Challenge**
 
-[Live web app](https://solarshare-web.vercel.app) · [API health](https://solarshare-api.onrender.com/health) · [Deployment guide](./DEPLOY_RENDER.md)
+[API health](https://solarshare-api.onrender.com/health) · [Deployment guide](./DEPLOY_RENDER.md)
 
 SolarShare helps households explore solar options, estimate value, organize customer and billing workflows, and move from interest to an informed next step. The repository demonstrates a production-shaped full-stack system rather than a single landing page.
 
